@@ -958,7 +958,7 @@ do_tag ()
 						echo DISCNUMBER="$DISCNUMBER"
 					fi
 					echo CDDB="${CDDBDISCID}"
-					if [ "$(eval echo ${COMMENT})" != "" ]; then
+					if [ "$(eval echo ${COMMENTOUTPUT})" != "" ]; then
 						case "$COMMENTOUTPUT" in
 							*=*) echo "$COMMENTOUTPUT";;
 							*)   echo COMMENT="$COMMENTOUTPUT";;
@@ -1009,7 +1009,7 @@ do_tag ()
 				echo DISCNUMBER="$DISCNUMBER"
 			fi
 			echo CDDB="${CDDBDISCID}"
-			if [ -n "$(eval echo "${COMMENT}")" ]; then
+			if [ -n "$(eval echo "${COMMENTOUTPUT}")" ]; then
 				case "$COMMENTOUTPUT" in
 					*=*) echo "$COMMENTOUTPUT";;
 					*)   echo COMMENT="$COMMENTOUTPUT";;

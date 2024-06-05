@@ -2921,7 +2921,6 @@ do_cddbedit ()
 					while [ $CDCHOICENUM -lt 0 ] || [ $CDCHOICENUM -gt $NUM_CDDB_MATCHES ]; do
 						echo -n "Which entry would you like abcde to use (0 for none)? [0-$NUM_CDDB_MATCHES or n,m to see differences]: " >&2
 						read CDDBCHOICE
-						[ X"$CDDBCHOICE" = "X" ] && CDDBCHOICE=1
 						if echo $CDDBCHOICE | grep -E "[[:space:]]*[[:digit:]]+,[[:digit:]]+[[:space:]]*" > /dev/null 2>&1 ; then
 							if [ ! X"$DIFF" = "X" ]; then
 								PARSECHOICE1=$(echo $CDDBCHOICE | cut -d"," -f1 | xargs printf %d 2>/dev/null)

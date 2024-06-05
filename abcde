@@ -2506,7 +2506,7 @@ do_localcddb_read ()
 				if [ "$INTERACTIVE" = "y" ]; then
 					while [ "$CDDBLOCALCHOICENUM" -lt 0 ] || [ "$CDDBLOCALCHOICENUM" -gt "$CDDBLOCALCHOICES" ]; do
 						echo "Locally cached CDDB entries found." >&2
-						echo -n "Which one would you like to use (0 for none)? [0-$CDDBLOCALCHOICES]: " >&2
+						echo -n "Which entry would you like abcde to use (0 for none)? [0-$CDDBLOCALCHOICES or n,m to see differences]: " >&2
 						read CDDBLOCALCHOICE
 						[ x"$CDDBLOCALCHOICE" = "x" ] && CDDBLOCALCHOICE="1"
 						# FIXME # Introduce diff's
@@ -2919,7 +2919,7 @@ do_cddbedit ()
 					CDCHOICENUM=-1
 					# I'll take CDDB read #3 for $400, Alex
 					while [ $CDCHOICENUM -lt 0 ] || [ $CDCHOICENUM -gt $NUM_CDDB_MATCHES ]; do
-						echo -n "Which entry would you like abcde to use (0 for none)? [0-$NUM_CDDB_MATCHES]: " >&2
+						echo -n "Which entry would you like abcde to use (0 for none)? [0-$NUM_CDDB_MATCHES or n,m to see differences]: " >&2
 						read CDDBCHOICE
 						[ X"$CDDBCHOICE" = "X" ] && CDDBCHOICE=1
 						if echo $CDDBCHOICE | grep -E "[[:space:]]*[[:digit:]]+,[[:digit:]]+[[:space:]]*" > /dev/null 2>&1 ; then

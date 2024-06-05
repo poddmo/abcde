@@ -5183,8 +5183,10 @@ if [ "$DOCDDB" = "y" ]; then
 				for X in $(f_seq_row 1 $NUM_CDDB_MATCHES)
 				do
 					ATITLE=$(grep -a -e '^DTITLE=' "${ABCDETEMPDIR}/cddbread.$X" | cut -c8- | tr -d \\r\\n)
+					AYEAR=$(grep -a -e '^DYEAR=' "${ABCDETEMPDIR}/cddbread.$X" | cut -c7- | tr -d \\r\\n)
+					AYEAR=${AYEAR:-Unknown year}
 					SOURCE=$(cat "${ABCDETEMPDIR}/datasource.$X")
-					echo "#$X ($SOURCE): ---- ${ATITLE} ----" >> "${ABCDETEMPDIR}/cddbchoices"
+					echo "#$X ($SOURCE): ---- ${ATITLE} ($AYEAR) ----" >> "${ABCDETEMPDIR}/cddbchoices"
                     for TRACK in $(f_seq_row 1 $TRACKS)
 					do
                         echo "$TRACK:" "$(grep -a ^TTITLE$(($TRACK - 1))= "${ABCDETEMPDIR}/cddbread.$X" | cut -f2- -d= | tr -d \\r\\n)" >> "${ABCDETEMPDIR}/cddbchoices"

@@ -1,0 +1,746 @@
+.TH abcde 1
+.SH NAME
+abcde \- Grab an entire CD and compress it to Ogg/Vorbis, MP3, FLAC, Ogg/Speex, AAC, 
+WavPack, Monkey's Audio (ape), MPP/MP+(Musepack), True Audio (tta), MP2 format
+and/or AIFF (Audio Interchange File Format).
+.SH SYNOPSIS
+.B abcde
+.I [options] [tracks]
+.SH DESCRIPTION
+Ordinarily, the process of grabbing the data off a CD and encoding it, then
+tagging or commenting it, is very involved.
+.BR abcde
+is designed to automate this. It will take an entire CD and convert it into
+a compressed audio format - Ogg/Vorbis, MPEG Audio Layer III (MP3), Free Lossless
+Audio Codec (FLAC), Ogg/Speex, MPP/MP+(Musepack), M4A (AAC) wv (WavPack), 
+Monkey's Audio (ape), Opus, True Audio (tta), MPEG Audio Layer II (MP2)
+or AIFF (Audio Interchange File Format) format(s).
+With one command, it will:
+.TP
+.B *
+Do a CDDB and/or Musicbrainz query over the Internet to look up your CD or
+use a locally stored CDDB entry, or read CD-TEXT from your CD if it's available
+.TP
+.B *
+Download the album art appropriate for your music tracks with many
+user configurable options for download and post download alterations
+including automated embedding of the album art for some containers
+.TP
+.B *
+Grab an audio track (or all the audio CD tracks) from your CD
+.TP
+.B *
+Normalize the volume of the individual file (or the album as a single unit)
+.TP
+.B *
+Compress to Ogg/Vorbis, MP3, FLAC, Ogg/Speex, MPP/MP+(Musepack), M4A, wv (WavPack), 
+Monkey's Audio (ape), Opus format(s), True Audio (tta), MP2 or AIFF
+(Audio Interchange File Format) all in one CD read
+.TP
+.B *
+Comment or ID3/ID3v2 tag
+.TP
+.B *
+Give an intelligible filename
+.TP
+.B *
+Calculate replaygain values for the individual file (or the album as a single unit)
+.TP
+.B *
+Delete the intermediate WAV file (or save it for later use)
+.TP
+.B *
+Repeat until finished
+.P
+Alternatively,
+.B abcde
+can also grab a CD and turn it into a single FLAC file with an embedded
+cuesheet which can be user later on as a source for other formats, and will be
+treated as if it was the original CD. In a way,
+.B abcde
+can take a compressed backup of your CD collection.
+.SH OPTIONS
+.TP
+.B \-1
+Encode the whole CD in a single file. The resulting file uses the CD title
+for tagging. If the resulting format is a flac file with an embedded cuesheet,
+the file can be used as a source for creating other formats. Use "\-1 \-o
+flac \-a default,cue" for obtaining such a file.
+.TP
+.B \-a [actions]
+Comma-delimited list of actions to perform. Can be one or more of: cddb, cue,
+read, getalbumart, embedalbumart, normalize, encode, tag, move, replaygain,
+playlist, clean. Normalize and encode imply read. Tag implies cddb, read,
+encode. Move implies cddb, read, encode, tag. Replaygain implies cddb, read,
+encode, tag and move. Playlist implies cddb. embedalbumart implies getalbumart.
+The default is to do all actions except cue, normalize, replaygain, getalbumart,
+embedalbumart and playlist.
+.TP
+.B \-b
+Enable batch mode normalization. See the BATCHNORM configuration variable.
+.TP
+.B \-B
+Enable automatic embedding of album art with certain containers. As of
+abcde 2.8.2 supported containers are mp3 (using eyeD3), flac (using
+metaflac), m4a (using AtomicParsley), WavPack aka wv (using wvtag) and
+experimental support for ogg (using vorbiscomment). This command line
+option also calls the getalbumart function. Further details of album art
+embedding using the embedalbumart function can be found in the abcde FAQ
+document packaged with abcde.
+.TP
+.B \-c [filename]
+Specifies an additional configuration file to parse. Configuration options
+in this file override those in \fI/etc/abcde.conf\fR or \fI$HOME/.abcde.conf\fR.
+.TP
+.B \-C [discid]
+Allows you to resume a session for
+.I discid
+when you no longer have the CD available (\fBabcde\fR will automatically resume if
+you still have the CD in the drive). You must have already finished at
+least the "read" action during the previous session.
+.TP
+.B \-d [devicename | filename]
+CD\-ROM block device that contains audio tracks to be read. Alternatively, a
+single-track flac file with embedded cuesheet.
+.TP
+.B \-D
+Capture debugging information (you'll want to redirect this \- try 'abcde \-D
+2>logfile')
+.TP
+.B \-e
+Erase information about encoded tracks from the internal status file, to enable
+other encodings if the wav files have been kept.
+.TP
+.B \-f
+Force the removal of the temporary ABCDETEMPDIR directory, even when we have
+not finished. For example, one can read and encode several formats, including
+\'.ogg\', and later on execute a \'move\' action with only one of the given
+formats. On a normal situation it would erase the rest of those encoded
+formats. In this case, \fBabcde\fR will refuse to execute such command, except if \-f
+is used.
+.TP
+.B \-g
+Enable lame's \-\-nogap option.  See the NOGAP variable. WARNING: lame's
+\-\-nogap disables the Xing mp3 tag.  This tag is required for mp3 players to
+correctly display track lengths when playing variable-bit-rate mp3 files.
+.TP
+.B \-G
+Download album art using the getalbumart function. This is best done with
+CDDBMETHOD including "musicbrainz", and requires the installation of glyrc.
+ImageMagick is an optional but highly recommended package. Further details
+of getalbumart can be found in the abcde FAQ document packaged with abcde.
+.TP
+.B \-h
+Get help information.
+.TP
+.B \-j [number]
+Start [number] encoder processes at once. Useful for SMP systems. Overrides
+the MAXPROCS configuration variable. Set it to "0" when using \fBdistmp3\fR to avoid
+local encoding processes.
+.TP
+.B \-k
+Keep the wav files after encoding.
+.TP
+.B \-l
+Use the low-diskspace algorithm. See the LOWDISK configuration variable.
+.TP
+.B \-L
+Use a local CDDB repository. See the CDDBLOCALDIR variable.
+.TP
+.B \-m
+Create DOS-style playlists, modifying the resulting one by adding CRLF line
+endings. Some hardware players insist on having those to work.
+.TP
+.B \-n
+Do not query CDDB database. Create and use a template. Edit the template to
+provide song names, artist(s), ...
+.TP
+.B \-N
+Non interactive mode. Do not ask anything from the user. Just go ahead.
+.TP
+.B \-o [filetype][:filetypeoptions]
+Select output type. Can be "vorbis" (or "ogg"), "mp3", "flac", "spx", "mpc", "m4a", 
+"wav", "wv", "ape", "opus", "mka" or "aiff".  Specify a comma-delimited list of output types
+to obtain all specified types.  See the OUTPUTTYPE configuration variable. One can
+pass options to the encoder for a specific filetype on the command line separating
+them with a colon. The options must be escaped with double-quotes.
+.TP
+.B \-O
+When fetching album art, always ask the user if they have a URL or
+local file to override whatever album art may have been automatically
+selected and downloaded. See the OVERRIDEALBUMARTDOWNLOAD
+configuration variable.
+.TP
+.B \-p
+Pads track numbers with 0\'s.
+.TP
+.B \-P
+Use Unix PIPES to read and encode in one step (USEPIPES). This disables multiple
+encodings, since the WAV audio file is never stored in the disc. For more detail
+on this option see the FAQ document in the source tarball.
+.TP
+.B \-r [hosts...]
+Remote encode on this comma-delimited list of machines using \fBdistmp3\fR. See
+the REMOTEHOSTS configuration variable.
+.TP
+.B \-s [fields...]
+List, separated by commas, the fields to be shown in the CDDB parsed entries.
+Right now it only uses "year" and "genre".
+.TP
+.B \-S [speed]
+Set the speed of the CD drive. Needs CDSPEED and CDSPEEDOPTS set properly
+and both the program and device must support the capability.
+.TP
+.B \-t [number]
+Start the numbering of the tracks at a given number. It only affects the
+filenames and the playlist. Internal (tag) numbering remains the same.
+.TP
+.B \-T [number]
+Same as \-t but changes also the internal (tag) numbering. Keep in mind that
+the default TRACK tag for MP3 is $T/$TRACKS so it is changed to simply $T.
+.TP
+.B \-U
+Set CDDBPROTO to version 5, so that we retrieve ISO-8859-15 encoded CDDB
+information, and we tag and add comments with Latin1 encoding.
+.TP
+.B \-v
+Show the version and exit
+.TP
+.B \-V
+Be more verbose. On slow networks the CDDB requests might give the
+sensation nothing is happening. Add this more than once to make things
+even more verbose.
+.TP
+.B \-x
+Eject the CD when all tracks have been read. See the EJECTCD configuration
+variable.
+.TP
+.B \-X [cue2discid]
+Use an alternative "cue2discid" implementation. The name of the binary must be
+exactly that. \fBabcde\fR comes with an implementation in python under the examples
+directory. The special keyword "builtin" forces the usage of the internal
+(default) implementation in shell script.
+.TP
+.B \-w [comment]
+Add a comment to the tracks ripped from the CD. If you wish to use
+parentheses, these will need to be escaped. i.e. you have to write
+"\\(" instead of "(".
+.TP
+.B \-W [number]
+Concatenate CD\'s. It uses the number provided to define a comment "CD #" and
+to modify the numbering of the tracks, starting with "#01". For Ogg/Vorbis and
+FLAC files, it also defines a DISCNUMBER tag.
+.TP
+.B \-z
+DEBUG mode: it will rip, using \fBcdparanoia\fR, the very first second of each track
+and proceed with the actions requested very quickly, also providing some
+"hidden" information about what happens on the background. CAUTION: IT WILL
+ERASE ANY EXISTING RIPS WITHOUT WARNING!
+.TP
+.B [tracks]
+A list of tracks you want \fBabcde\fR to process. If this isn't specified, \fBabcde\fR
+will process the entire CD. Accepts ranges of track numbers -
+"abcde 1-5 7 9" will process tracks 1, 2, 3, 4, 5, 7, and 9.
+.SH OUTPUT
+Each track is, by default, placed in a separate file named after the track in a
+subdirectory named after the artist under the current directory. This can be
+modified using the OUTPUTFORMAT and VAOUTPUTFORMAT variables in your
+\fIabcde.conf\fR. Each file is given an extension identifying  its compression
+format, 'vorbis' for '.ogg', '.mp3', '.flac', '.spx', '.mpc', '.wav', '.wv',
+\(aq.ape', '.opus', '.mka' or 'aiff'.
+.SH CONFIGURATION
+\fBabcde\fR sources two configuration files on startup - \fI/etc/abcde.conf\fR and
+\fI$HOME/.abcde.conf\fR, in that order.
+.PP
+The configuration options stated in those files can be overridden by providing
+the appropriate flags at runtime.
+.PP
+The configuration variables have to be set as follows:
+.TP
+.B VARIABLE=value
+Except when "value" needs to be quoted or otherwise interpreted. If other
+variables within "value" are to be expanded upon reading the configuration
+file, then double quotes should be used. If they are only supposed to be
+expanded upon use (for example OUTPUTFORMAT) then single quotes must be used.
+.TP
+All shell escaping/quoting rules apply.
+.TP
+Here is a list of options \fBabcde\fR recognizes:
+.TP
+.B CDDBMETHOD
+Specifies the methods we want to use to retrieve the track
+information. Three values are recognized: "cddb", "musicbrainz" and
+"cdtext". List all the methods desired in a comma delimited list and
+\fBabcde\fR will attempt them all, returning a list of all search
+results. The "cddb" value needs the CDDBURL and HELLOINFO variables
+described below. The "musicbrainz" value uses the Perl helper script
+\fBabcde-musicbrainz-tool\fR to establish a conversation with the
+Musicbrainz server for information retrieval. "cdtext" needs "icedax"
+or "cdda2wav" to be installed.
+.TP
+.B CDDBURL
+Specifies a server to use for CDDB lookups.
+.TP
+.B CDDBPROTO
+Specifies the protocol version used for the CDDB retrieval of results. Version
+6 retrieves CDDB entries in UTF-8 format.
+.TP
+.B HELLOINFO
+Specifies the Hello information to send to the CDDB server. The CDDB
+protocol requires you to send a valid username and hostname each time you
+connect. The format of this is username@hostname.
+.TP
+.B CDDBLOCALDIR
+Specifies a directory where we store a local CDDB repository. The entries must
+be standard CDDB entries, with the filename being the DISCID value. Other
+CD playing and ripping programs (like Grip) store the entries under \fI~/.cddb\fR
+and we can make use of those entries.
+.TP
+.B CDDBLOCALRECURSIVE
+Specifies if the CDDBLOCALDIR has to be searched recursively trying to find a
+match for the CDDB entry. If a match is found and selected, and CDDBCOPYLOCAL
+is selected, it will be copied to the root of the CDDBLOCALDIR if
+CDDBLOCALPOLICY is "modified" or "new". The default "y" is needed for the local
+CDDB search to work.
+.TP
+.B CDDBLOCALPOLICY
+Defines when a CDDB entry should be stored in the defined CDDBLOCALDIR. The
+possible policies are: "net" for a CDDB entry which has been received from the
+net (overwriting any possible local CDDB entry); "new" for a CDDB entry which
+was received from the net, but will request confirmation to overwrite a local
+CDDB entry found in the root of the CDDBLOCALDIR directory; "modified" for a
+CDDB entry found in the local repository but which has been modified by the
+user; and "always" which forces the CDDB entry to be stored back in the root of
+the CDDBLOCALDIR no matter where it was found, and no matter it was not edited.
+This last option will always overwrite the one found in the root of the local
+repository (if any). STILL NOT WORKING!!
+.TP
+.B CDDBCOPYLOCAL
+Store local copies of the CDDB entries under the $CDDBLOCALDIR directory.
+.TP
+.B CDDBUSELOCAL
+Actually use the stored copies of the CDDB entries. Can be overridden using the
+"\-L" flag (if is CDDBUSELOCAL in "n"). If an entry is found, we always give
+the choice of retrieving a CDDB entry from the internet.
+.TP
+.B SHOWCDDBFIELDS
+Coma-separated list of fields we want to parse during the CDDB parsing.
+Defaults to "year,genre".
+.TP
+.B OGGENCODERSYNTAX
+Specifies the style of encoder to use for the Ogg/Vorbis encoder. Valid options
+are \'oggenc\' (default for Ogg/Vorbis) and \'vorbize\'.
+This affects the default location of the binary,
+the variable to pick encoder command-line options from, and where the options
+are given.
+.TP
+.B MP3ENCODERSYNTAX
+Specifies the style of encoder to use for the MP3 encoder. Valid options are
+\'lame\' (default for MP3), \'gogo\', \'bladeenc\', \'l3enc\' and \'mp3enc\'.
+Affects the same way as explained above for Ogg/Vorbis.
+.TP
+.B FLACENCODERSYNTAX
+Specifies the style of encoder to use for the FLAC encoder. At this point only
+\'flac\' is available for FLAC encoding.
+.TP
+.B MP2ENCODERSYNTAX
+Specifies the style of encoder to use for the MPEG-1 Audio Layer II (MP2) encoder.
+At this point both \'twolame\' and \'ffmpeg\' are available for MP2 encoding.
+.TP
+.B SPEEXENCODERSYNTAX
+Specifies the style of encoder to use for Speex encoder. At this point only
+\'speexenc\' is available for Ogg/Speex encoding.
+.TP
+.B MPCENCODERSYNTAX
+Specifies the style of encoder to use for MPP/MP+ (Musepack) encoder. At this
+point we only have \'mpcenc\' available, from musepack.net.
+.TP
+.B AACENCODERSYNTAX
+Specifies the style of encoder to use for M4A (AAC) encoder. We support \'fdkaac\'
+as \'default\' as well as FFmpeg or avconv, neroAacEnc, qaac and fhgaacenc. If qaac,
+refalac or FFmpeg / avconv are used it is also possible to generate Apple Lossless
+Audio Codec (alac) files. Note that qaac, refalac and fhgaacenc are Windows applications
+which require Wine to be installed.
+.TP
+.B TTAENCODERSYNTAX
+Specifies the style of encoder to use for True Audio (tts) encoding. We
+support \'tta\' as default but the older \'ttaenc\' can be used as well.
+.TP
+.B WVENCODERSYNTAX
+Specifies the style of encoder to use for WavPack. We support \'wavpack\'
+as \'default\' but \'ffmpeg'\ is the other option (Note that this is for
+FFmpeg only as avconv does not have a native WavPack encoder).
+.TP
+.B APENCODERSYNTAX
+Specifies the style of encoder to use for Monkey's Audio (ape). We support \'mac\',
+Monkey's Audio Console, as \'default\'.
+.TP
+.B OPUSENCODERSYNTAX
+Specifies the style of encoder to use for the Opus encoder. At this point only
+\'opusenc\' is available for Opus encoding.
+.TP
+.B MKAENCODERSYNTAX
+Specifies the style of encoder to use for the Matroska or mka container. At this
+point only \'ffmpeg\' is available to utilise the mka container. Safe audio codecs
+for mka include Vorbis, MP2, MP3, LC-AAC, HE-AAC, WMAv1, WMAv2, AC3, eAC3 and Opus.
+See the FAQ document for more information.
+.TP
+.B AIFFENCODERSYNTAX
+Specifies the style of encoder to use for Audio Interchange File Format (AIFF). 
+At this point only \'ffmpeg\' is available to utilise the AIFF container. 
+.TP
+.B NORMALIZERSYNTAX
+Specifies the style of normalizer to use.  Valid options are \'default\'
+and \'normalize'\ (and both run \'normalize-audio\'), since we only support it,
+ATM.
+.TP
+.B CDROMREADERSYNTAX
+Specifies the style of cdrom reader to use. Valid options are \'cdparanoia\',
+\'libcdio'\, \'debug\' and \'flac\'. It is used for querying the CDROM and 
+obtain a list of valid tracks and DATA tracks. The special \'flac\' case is u
+sed to "rip" CD tracks from a single-track flac file.
+.TP
+.B CUEREADERSYNTAX
+Specifies the syntax of the program we use to read the CD CUE sheet. Right now
+we only support \'mkcue\', but in the future other readers might be used.
+.TP
+.B KEEPWAVS
+It defaults to no, so if you want to keep those wavs ripped from your CD,
+set it to "y". You can use the "\-k" switch in the command line. The default
+behaviour with KEEPWAVS set is to keep the temporary directory and the wav
+files even you have requested the "clean" action.
+.TP
+.B PADTRACKS
+If set to "y", it adds 0's to the file numbers to complete a two-number
+holder. Useful when encoding tracks 1-9.
+.TP
+.B INTERACTIVE
+Set to "n" if you want to perform automatic rips, without user intervention.
+.TP
+.B NICE VALUES
+Define the values for priorities (nice values) for the different CPU-hungry
+processes: encoding (ENCNICE), CDROM read (READNICE) and distributed encoder
+with \fBdistmp3\fR (DISTMP3NICE).
+.TP
+.B PATHNAMES
+The following configuration file options specify the pathnames of their
+respective utilities: LAME, GOGO, BLADEENC, L3ENC, XINGMP3ENC, MP3ENC,
+VORBIZE, OGGENC, FLAC, SPEEXENC, MPCENC, WAVEPACK, APENC, OPUSENC, ID3, EYED3,
+METAFLAC, CDPARANOIA, CD_PARANOIA, CDDA2WAV, PIRD, CDDAFS, CDDISCID, CDDBTOOL, 
+EJECT, MD5SUM, DISTMP3, VORBISCOMMENT, NORMALIZE, CDSPEED, MP3GAIN, VORBISGAIN, 
+MPCGAIN, MKCUE, MKTOC, CUE2DISCID (see option "\-X"), DIFF, HTTPGET, GLYRC,
+IDENTIFY, DISPLAYCMD, CONVERT, QAAC, WINE, FHGAACENC, ATOMICPARSLEY, FFMPEG,
+TWOLAME, MID3V2, TTA and TTAENC.
+.TP
+.B COMMAND-LINE OPTIONS
+If you wish to specify command-line options to any of the programs \fBabcde\fR uses,
+set the following configuration file options: LAMEOPTS, GOGOOPTS, AIFFENCOPTS,
+BLADEENCOPTS, L3ENCOPTS, XINGMP3ENCOPTS, MP3ENCOPTS, VORBIZEOPTS, WAVEPACKENCOPTS, APENCOPTS,
+OGGENCOPTS, FLACOPTS, SPEEXENCOPTS, MPCENCOPTS, FAACENCOPTS, NEROAACENCOPTS, FDKAACENCOPTS, 
+OPUSENCOPTS, ID3OPTS, EYED3OPTS, MP3GAINOPTS, CDPARANOIAOPTS, CDDA2WAVOPTS, PIRDOPTS, 
+CDDAFSOPTS, CDDBTOOLOPTS, EJECTOPTS, DISTMP3OPTS, NORMALIZEOPTS, CDSPEEDOPTS, MKCUEOPTS, 
+VORBISCOMMMENTOPTS, METAFLACOPTS, DIFFOPTS, FLACGAINOPTS, VORBISGAINOPTS, HTTPGETOPTS,
+GLYRCOPTS, IDENTIFYOPTS, CONVERTOPTS, DISPLAYCMDOPTS, QAACENCOPTS, FHGAACENCOPTS,
+ATOMICPARSLEYOPTS, FFMPEGENCOPTS, DAGRABOPTS, TWOLAMENCOPTS and TTAENCOPTS.
+.TP
+.B CDSPEEDVALUE
+Set the value of the CDROM speed. The default is to read the disc as fast as
+the reading program and the system permits. The steps are defined as 150kB/s
+(1x).
+.TP
+.B ACTIONS
+The default actions to be performed when reading a disc.
+.TP
+.B CDROM
+If set, it points to the CD-Rom device which has to be used for audio
+extraction. Abcde tries to guess the right device, but it may fail. The special
+\'flac\' option is defined to extract tracks from a single-track flac file.
+.TP
+.B CDPARANOIACDROMBUS
+Defined as "d" when using \fBcdparanoia\fR with an IDE bus and as "g" when using
+\fBcdparanoia\fR with the ide-scsi emulation layer.
+.TP
+.B OUTPUTDIR
+Specifies the directory to place completed tracks/playlists in.
+.TP
+.B WAVOUTPUTDIR
+Specifies the temporary directory to store .wav files in. Abcde may use up
+to 700MB of temporary space for each session (although it is rare to use
+over 100MB for a machine that can encode music as fast as it can read it).
+.TP
+.B OUTPUTTYPE
+Specifies the encoding format to output, as well as the default extension and
+encoder. Defaults to "vorbis". Valid settings are "vorbis" (or "ogg")
+(Ogg/Vorbis), "mp3" (MPEG-1 Audio Layer III), "flac" (Free Lossless Audio
+Codec), "mp2" (MPEG-1 Audio Layer III), "spx" (Ogg/Speex), "mpc" (MPP/MP+ (Musepack),
+"m4a" (AAC or ALAC),"wv" (WavPack"), "wav" (Microsoft Waveform), "opus"
+(Opus Interactive Audio Codec), "tta" (True Audio), "mka" (Matroska) or
+"aiff" (Audio Interchange File Format). Values like "vorbis,mp3" encode
+the tracks in both Ogg/Vorbis and MP3 formats. For example:
+.br
+OUTPUTTYPE=vorbis,flac
+.br
+For each value in OUTPUTTYPE, \fBabcde\fR expands a different process for encoding,
+tagging and moving, so you can use the format placeholder, OUTPUT, to create
+different subdirectories to hold the different types. The variable OUTPUT will
+be 'vorbis', 'mp3', 'flac', 'spx', 'mpc', 'm4a', mp2, 'wv', 'ape', 'tta', 'wav', 
+'mka' and/or 'aiff' depending on the OUTPUTTYPE you define. For example
+.br
+OUTPUTFORMAT='${OUTPUT}/${ARTISTFILE}/${ALBUMFILE}/${TRACKNUM}._${TRACKFILE}'
+.TP
+.B OUTPUTFORMAT
+Specifies the format for completed Ogg/Vorbis, MP3, FLAC, Ogg/Speex, MPP/MP+
+(Musepack) or M4A filenames. Variables are included using standard shell
+syntax. Allowed variables are GENRE, ALBUMFILE, ARTISTFILE, TRACKFILE,
+TRACKNUM, and YEAR. Default is \'${ARTISTFILE}-${ALBUMFILE}/${TRACKNUM}-${TRACKFILE}\'.
+Make sure to use single quotes around this variable. TRACKNUM is automatically
+zero-padded, when the number of encoded tracks is higher than 9. When lower,
+you can force with '\-p' in the command line.
+.TP
+.B VAOUTPUTFORMAT
+Just like OUTPUTFORMAT but for Various Artists discs. The default is
+\(aqVarious-${ALBUMFILE}/${TRACKNUM}.${ARTISTFILE}-${TRACKFILE}'
+.TP
+.B ONETRACKOUTPUTFORMAT
+Just like OUTPUTFORMAT but for single-track rips (see option "\-1"). The default
+is '${ARTISTFILE}-${ALBUMFILE}/${ALBUMFILE}'
+.TP
+.B VAONETRACKOUTPUTFORMAT
+Just like ONETRACKOUTPUTFORMAT but for Various Artists discs. The default
+is 'Various-${ALBUMFILE}/${ALBUMFILE}'
+.TP
+.B MAXPROCS
+Defines how many encoders to run at once. This makes for huge speedups
+on SMP systems. You should run one encoder per CPU at once for maximum
+efficiency, although more doesn't hurt very much. Set it "0" when using
+mp3dist to avoid getting encoding processes in the local host.
+.TP
+.B LOWDISK
+If set to y, conserves disk space by encoding tracks immediately after
+reading them. This is substantially slower than normal operation but
+requires several hundred MB less space to complete the encoding of an
+entire CD. Use only if your system is low on space and cannot encode as
+quickly as it can read.
+
+Note that this option may also help when reading
+a CD with errors. This is because on a scratchy disk reading is quite timing
+sensitive and this option reduces the background load on the system which
+allows the ripping program more precise control.
+.TP
+.B BATCHNORM
+If set to y, enables batch mode normalization, which preserves relative
+volume differences between tracks of an album. Also enables nogap encoding
+when using the \'lame\' encoder.
+.TP
+.B NOGAP
+Activate the lame's \-\-nogap option, that allows files found in CDs with no
+silence between songs (such as live concerts) to be encoded without noticeable
+gaps. WARNING: lame's \-\-nogap disables the Xing mp3 tag.  This tag is
+required for mp3 players to correctly display track lengths when playing
+variable-bit-rate mp3 files.
+.TP
+.B PLAYLISTFORMAT
+Specifies the format for completed playlist filenames. Works like the
+OUTPUTFORMAT configuration variable. Default is
+\'${ARTISTFILE}_\-_${ALBUMFILE}.m3u\'.
+Make sure to use single quotes around this variable.
+.TP
+.B PLAYLISTDATAPREFIX
+Specifies a prefix for filenames within a playlist. Useful for http
+playlists, etc.
+.TP
+.B DOSPLAYLIST
+If set, the resulting playlist will have CR-LF line endings, needed by some
+hardware-based players.
+.TP
+.B COMMENT
+Specifies a comment to embed in the ID3 or Ogg comment field of each
+finished track. Can be up to 28 characters long. Supports the same
+syntax as OUTPUTFORMAT. Does not currently support ID3v2.
+.TP
+.B REMOTEHOSTS
+Specifies a comma-delimited list of systems to use for remote encoding using
+\fBdistmp3\fR. Equivalent to \-r.
+.TP
+.B mungefilename
+mungefilename() is an \fBabcde\fR shell function that can be overridden via
+\fIabcde.conf\fR. It takes CDDB data as $1 and outputs the resulting filename on
+stdout. It defaults to deleting any preceding dots to filename, replacing spaces
+with an underscore and eating characters which variously Windows and Linux do
+not permit.
+.br
+If you modify this function, it is probably a good idea to keep the forward
+slash munging (UNIX cannot store a file with a '/' char in it) as well as
+the control character munging (NULs can't be in a filename either, and
+newlines and such in filenames are typically not desirable).
+.br
+New to abcde 2.7.3 are the user definable functions mungetrackname, mungeartistname
+and mungealbumname which default to mungefilename. These permit finer-grained
+control of track name, artist name and album name for the ultra-fastidious.
+.TP
+.B mungegenre
+mungegenre () is a shell function used to modify the $GENRE variable. As
+a default action, it takes $GENRE as $1 and outputs the resulting value
+to stdout converting all UPPERCASE characters to lowercase.
+.TP
+.B pre_read
+pre_read () is a shell function which is executed before the CDROM is read
+for the first time, during \fBabcde\fR execution. It can be used to close the CDROM
+tray, to set its speed (via "setcd" or via "eject", if available) and other
+preparation actions. The default function is empty.
+.TP
+.B post_read
+post_read () is a shell function which is executed after the CDROM is read
+(and, if applies, before the CDROM is ejected). It can be used to read a TOC
+from the CDROM, or to try to read the DATA areas from the CD (if any exist).
+The default function is empty.
+.TP
+.B post_encode
+post_encode () is a shell function which is executed after the encoding process.
+It can be used to move completed files to another location, run any sort of testing
+on the completed files or embed album art if the built in embedding provided by
+abcde's embedalbumart function is not to your taste.
+The default function is empty.
+.TP
+.B EJECTCD
+If set to "y", \fBabcde\fR will call \fBeject\fR(1) to eject the cdrom from the drive
+after all tracks have been read. It has no effect when CDROM is set to a flac
+file.
+.TP
+.B EXTRAVERBOSE
+If set to "1", some operations which are usually now shown to the end user
+are visible, such as CDDB queries. Useful for initial debug and if your
+network/CDDB server is slow. Set to "2" or more for even more verbose
+output.
+.SH EXAMPLES
+Possible ways one can call \fBabcde\fR:
+.TP
+.B abcde
+Will work in most systems
+.TP
+.B abcde \-d /dev/cdrom2
+If the CDROM you are reading from is not the standard \fI/dev/cdrom\fR (in GNU/Linux systems)
+.TP
+.B abcde \-o vorbis,flac
+Will create both Ogg/Vorbis and Ogg/FLAC files.
+.TP
+.B abcde \-o vorbis:"-b 192"
+Will pass "\-b 192" to the Ogg/Vorbis encoder, without having to modify the
+config file
+.TP
+.B abcde \-o mp3,flac,m4a,wv,ogg -B
+abcde will create mp3, flac, m4a, wv and ogg files and also select
+suitable album art, download and embed the album art into all 5 sets of tracks.
+.TP
+.B abcde \-W 1
+For double+ CD settings: will create the 1st CD starting with the track number
+101, and will add a comment "CD 1" to the tracks, the second starting with 201
+and so on.
+.TP
+.B abcde \-d singletrack.flac -o vorbis:"-q 6"
+Will extract the files contained in singletrack FLAC file using the embedded
+cuesheet and then encode the output files to Ogg/Vorbis with a quality setting of 6.
+.SH BACKEND TOOLS
+\fBabcde\fR requires the following backend tools to work:
+.TP
+.B *
+An Ogg/Vorbis, MP3, FLAC, Ogg/Speex, MPP/MP+(Musepack), M4A encoder or Opus encoder 
+(oggenc, vorbize, lame, gogo, bladeenc, l3enc, mp3enc, flac, speexenc, mpcenc,
+fdkaac, neroAacEnc, faac, wavpack, opusenc).
+.TP
+.B *
+An audio CD reading utility (cdparanoia, icedax, cdda2wav, libcdio (cd-paranoia),
+pird, dagrab). To read CD-TEXT information, icedax or cdda2wav will be needed.
+.TP
+.B *
+cd-discid, a CDDB DiscID reading program.
+.TP
+.B *
+An HTTP retrieval program: wget, fetch (FreeBSD) or curl (Mac OS X,
+among others). Alternatively, abcde-musicbrainz-tool (which depends on
+Perl and some Musicbrainz libraries) can be used to retrieve CDDB
+information about the CD.
+.TP
+.B *
+(for MP3s) id3 or eyeD3, id3 v1 and v2 tagging programs.
+.TP
+.B *
+For Monkey's Audio (ape) tagging Robert Muth's 'apetag' is required.
+.TP
+.B *
+To retrieve album art a glyrc package is required and optionally the
+ImageMagick package should be installed.
+.TP
+.B *
+(optional) distmp3, a client/server for distributed mp3 encoding.
+.TP
+.B *
+(optional) normalize-audio, a WAV file volume normalizer.
+.TP
+.B *
+(optional) a replaygain file volume modifier (vorbisgain, metaflac, mp3gain, mpcgain, wvgain),
+.TP
+.B *
+(optional) mkcue, a CD cuesheet extractor.
+.SH "SEE ALSO"
+.BR cdparanoia (1),
+.BR cd-paranoia (1)
+.BR icedax (1),
+.BR cdda2wav (1),
+.BR twolame (1),
+.BR mid3v2 (1),
+.BR pird (1),
+.BR dagrab (1),
+.BR normalize-audio (1),
+.BR oggenc (1),
+.BR vorbize (1),
+.BR flac (1),
+.BR speexenc (1),
+.BR mpcenc (1),
+.BR faac (1),
+.BR fdkaac (1),
+.BR identify (1),
+.BR display (1),
+.BR convert (1),
+.BR wavpack (1),
+.BR wvgain (1),
+.BR wvtag (1),
+.BR id3 (1),
+.BR eyeD3 (1),
+.BR wget (1),
+.BR fetch (1),
+.BR cd-discid (1),
+.BR distmp3 (1),
+.BR distmp3host (1),
+.BR curl (1),
+.BR mkcue (1),
+.BR vorbisgain (1),
+.BR mp3gain (1)
+
+.SH DATA FORMATS
+The CDDB metadata format is used a lot by abcde, both for lookups and
+internally. It's documented online at
+\%http://ftp.freedb.org/pub/freedb/latest/DBFORMAT
+
+.SH FAQ
+
+.TP
+.B What is the odd-looking progress indicator when ripping?
+\fBcdparanoia\fR is the default ripping program used by abcde on many
+platforms, and it tries to give information about the ripping quality
+as it runs. See the
+.BR cdparanoia (1)
+man page for more details, or look online at
+\%https://www.xiph.org/paranoia/faq.html#progbar .
+
+.SH AUTHORS
+The main authors and maintainers have been Robert Woodcock
+\%<rcw@debian.org>, Jesus Climent \%<jesus.climent@hispalinux.es>,
+Colin Tuckley \%<colint@debian.org>, Steve McIntyre
+\%<93sam@debian.org>, Andrew Strong \%<andrew.david.strong@gmail.com>,
+and there have been lots of contributions from many others over the
+years.
+
+If you're looking for help with abcde, the best place in the first
+instance is likely to be the mailing list:
+\%abcde-users@lists.einval.com.

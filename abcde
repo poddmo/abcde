@@ -1,0 +1,5591 @@
+#!/bin/bash
+# Copyright (c) 1998-2001 Robert Woodcock <rcw@debian.org>
+# Copyright (c) 2003-2006 Jesus Climent <jesus.climent@hispalinux.es>
+# Copyright (c) 2009-2012 Colin Tuckley <colint@debian.org>
+# Copyright (c) 2012-2019 Steve McIntyre <93sam@@debian.org>
+# Copyright (c) 2015-2017 Andrew Strong <andrew.david.strong@gmail.com>
+# This code is hereby licensed for public consumption under either the
+# GNU GPL v2 or greater, or Larry Wall's Artistic license - your choice.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+
+VERSION='2.9.4-DEV'
+
+usage ()
+{
+echo "This is abcde v$VERSION."
+echo "Usage: abcde [options] [tracks]"
+echo "Options:"
+echo "-1     Encode the whole CD in a single file"
+echo "-a <action1[,action2]...>"
+echo "       Actions to perform, comma separated:"
+echo "       (cddb,read,getalbumart,embedalbumart,normalize,encode,"
+echo "       tag,move,replaygain,playlist,clean)"
+#echo "-A     Experimental actions (retag, transcode)"
+echo "-b     Enable batch normalization"
+echo "-B     Embed albumart (this also activates getalbumart)"
+echo "-c <file>"
+echo "       Specify a configuration file (overrides system and user config files)"
+echo "-C <discid#>"
+echo "       Specify discid to resume from (only needed if you no longer have the cd)"
+echo "-d <device>"
+echo "       Specify CDROM device to grab (flac uses a single-track flac file)"
+echo "-D     Debugging mode (equivalent to sh -x abcde)"
+echo "-e     Erase encoded track information from status file"
+echo "-f     Force operations that otherwise are considered harmful. Read \"man abcde\""
+echo "-g     Use \"lame --nogap\" for MP3 encoding. Disables low disk and pipes flags"
+echo "-G     Get album art by using the 'getalbumart' action"
+echo "-h     This help information"
+#echo "-i    Tag files while encoding, when possible (local only) -NWY-"
+echo "-j <#> Number of encoder processes to run at once (localhost)"
+echo "-k     Keep the wav tracks for later use"
+echo "-l     Use low disk space algorithm"
+echo "-L     Use local CDDB storage directory"
+echo "-m     Modify playlist to include CRLF endings, to comply with some players"
+#echo "       WARNING: Deprecated. Use \"cue\" action"
+#echo "-M     Create a CUE file"
+echo "-n     No lookup. Don't query CDDB, just create and use template"
+echo "-N     Noninteractive. Never prompt for anything"
+echo "-o <type1[,type2]...>"
+echo "       Output file type(s), comma separated"
+echo "       (vorbis,mp3,flac,spx,mpc,wav,m4a,opus,mka,wv,ape,mp2,tta,aiff)."
+echo "       Defaults to vorbis"
+echo "-O     Allow Override of album art lookup"
+echo "-p     Pad track numbers with 0's (if less than 10 tracks)"
+echo "-P     Use UNIX pipes to read+encode without wav files"
+echo "-Q     CD lookup method(s), comma separated"
+echo "       (musicbrainz,cddb,cdtext). Defaults to musicbrainz".
+echo "-r <host1[,host2]...>"
+echo "       Also encode on these remote hosts"
+echo "-s <field>"
+echo "       Show fields from the CDDB info (year,genre)"
+echo "-S <#> Set the CD speed"
+echo "-t <#> Start the track numbering at a given number"
+echo "-T <#> Same as -t but modifies tag numbering"
+echo "-U     Do NOT use UNICODE (UTF8) tags and comments"
+echo "-v     Show version number and exit"
+echo "-V     Be a bit more verbose about what is happening behind the scenes"
+echo "-x     Eject CD after all tracks are read"
+echo "-w <comment>"
+echo "       Add a comment to the CD tracks"
+echo "-W <#> Concatenate CDs: -T #01 -w \"CD #\""
+echo "-z     Use debug CDROMREADERSYNTAX option (needs cdparanoia)"
+echo ""
+echo "Tracks is a space-delimited list of tracks to grab."
+echo "Ranges specified with hyphens are allowed (i.e., 1-5)."
+echo ""
+#echo "Double hyphens are used to concatenate tracks"
+}
+
+addstatus ()
+{
+	echo "$@" >> "${ABCDETEMPDIR}/status"
+}
+
+# log [level] [message]
+#
+# log outputs the right message in a common format
+log ()
+{
+	BLURB="$1"
+	shift
+	case $BLURB in
+		error)   >&2 echo "[ERROR] abcde: $@" >&2 ;;
+		warning) >&2 echo "[WARNING] $@" >&2 ;;
+		info)    >&4 echo "[INFO] $@" ;;
+	esac
+}
+
+# Functions to replace the need of seq, which is too distribution dependent.
+f_seq_row ()
+{
+	i=$1
+	while [ $i -le $2 ]
+	do
+		echo $i
+		i=$(( $i + 1 ))
+	done
+}
+
+f_seq_line ()
+{
+	i=$1
+	if echo "$i" | grep "[[:digit:]]" > /dev/null 2>&1 ; then
+		while [ $i -le $2 ]
+		do
+			printf "%d " "$i"
+			i=$(( $i + 1 ))
+		done
+		echo
+	else
+		log error "syntax error while processing track numbers ($i)"
+		exit 1
+	fi
+}
+
+# Functions to replace the need of awk {print $1} and {print $NF}
+get_first()
+{
+	if [ X"$1" = "X" ]; then
+		for first in $(cat); do
+			break
+		done
+	else
+		first=$1
+	fi
+	echo "$first"
+}
+
+get_last()
+{
+	if [ X"$1" = "X" ]; then
+		for stdin in $(cat); do
+			last=$stdin
+		done
+	else
+		for last in $@ ; do :; done
+	fi
+	echo "$last"
+}
+
+# checkstatus [blurb]
+# Returns "0" if the blurb was found, returns 1 if it wasn't
+# Puts the blurb content, if available, on stdout.
+# Otherwise, returns "".
+checkstatus ()
+{
+	# Take the last line in the status file if there's multiple matches
+	PATTERN="^$1(=.*)?$"
+	BLURB=$(grep -E "$PATTERN" "${ABCDETEMPDIR}/status" | tail -n 1)
+
+	if [ -z "$BLURB" ]; then
+		# No matches found
+		return 1
+	else
+		# Matches found
+		# See if there's a = in it
+		if ( echo "$BLURB" | grep -q '=' ); then
+			echo "$BLURB" | cut -f2- -d=
+		fi
+		return 0
+	fi
+}
+
+# checkwarnings [blurb]
+# Returns "0" if the blurb was found (meaning there was an warning),
+# returns 1 if it wasn't (yes this is a little backwards).
+# Does not print the blurb on stdout.
+# Otherwise, returns "".
+checkwarnings ()
+{
+	if [ -e "${ABCDETEMPDIR}/warnings" ]; then :; else
+		return 1
+	fi
+	# Take the last line in the status file if there's multiple matches
+	PATTERN="^$1(:.*)?$"
+	BLURB=$(grep -E "$PATTERN" "${ABCDETEMPDIR}/warnings" | tail -n 1)
+
+	if [ -z "$BLURB" ]; then
+		# negative, we did not have a negative...
+		return 1
+	else
+		# affirmative, we had a negative...
+		return 0
+	fi
+}
+
+# checkerrors [blurb]
+# Returns "0" if the blurb was found (meaning there was an error),
+# returns 1 if it wasn't (yes this is a little backwards).
+# Does not print the blurb on stdout.
+# Otherwise, returns "".
+checkerrors ()
+{
+	if [ -e "${ABCDETEMPDIR}/errors" ]; then :; else
+		return 1
+	fi
+	# Take the last line in the status file if there's multiple matches
+	PATTERN="^$1(:.*)?$"
+	BLURB=$(grep -E "$PATTERN" "${ABCDETEMPDIR}/errors" | tail -n 1)
+
+	if [ -z "$BLURB" ]; then
+		# negative, we did not have a negative...
+		return 1
+	else
+		# affirmative, we had a negative...
+		return 0
+	fi
+}
+
+# page [file]
+# Display a file. If it's too long to fit the current terminal size,
+# find the right pager in the system and use it
+page ()
+{
+	PAGEFILE="$1"
+	local NUM_LINES=$(wc -l < "$PAGEFILE")
+	local LINES=""
+
+	# Check the terminal length every time we're called - the user
+	# might have resized since last time we were here
+	# First, try tput
+	if new_checkexec tput; then
+		LINES=$(tput lines)
+	fi
+
+	# If tput didn't work, 24 will do...
+	if [ -z "$LINES" ]; then
+		LINES=24
+	fi
+
+	# Is the text long enough to need a pager?
+	if [ "$NUM_LINES" -ge $LINES ]; then
+		# Yes!
+		# Use the debian sensible-pager wrapper to pick the pager user
+		# has requested via their $PAGER environment variable
+		if [ -x "/usr/bin/sensible-pager" ]; then
+			/usr/bin/sensible-pager "$PAGEFILE"
+		elif [ -x "$PAGER" ]; then
+			# That failed, try to load the preferred pager, starting
+			# with their PAGER variable
+			$PAGER "$PAGEFILE"
+			# If that fails, check for less
+		elif [ -x /usr/bin/less ]; then
+			/usr/bin/less -f "$PAGEFILE"
+			# more should be on all UNIX systems
+		elif [ -x /bin/more ]; then
+			/bin/more "$PAGEFILE"
+		else
+			# No bananas, just cat the thing
+			cat "$PAGEFILE" >&2
+		fi
+	else
+		# No, just cat the thing
+		cat "$PAGEFILE" >&2
+	fi
+}
+
+# run_command [blurb] [command...]
+# Runs a command, silently if necessary, and updates the status file
+run_command ()
+{
+	vvecho "$@"
+	BLURB="$1"
+	shift
+	# See if this is supposed to be silent
+	if [ "$(checkstatus encode-output)" = "loud" ]; then
+		"$@" >&2
+		RETURN=$?
+	else
+		# Special case for SMP, since
+		# encoder output is never displayed, don't mute echos
+		if [ -z "$BLURB" ] && [ "$MAXPROCS" != "1" ]; then
+			"$@" >&2
+			RETURN=$?
+		else
+			"$@" >/dev/null 2>&1
+			RETURN=$?
+		fi
+	fi
+	case "$1" in
+	normalize|normalize-audio)
+		if [ "$RETURN" = "2" ]; then
+			# File was already normalized.
+			RETURN=0
+		fi
+		;;
+	esac
+	if [ "$RETURN" != "0" ]; then
+		# Put an error in the errors file. For various reasons we
+		# can't capture a copy of the program's output but we can
+		# log what we attempted to execute and the error code
+		# returned by the program.
+		if [ "$BLURB" ]; then
+			TWEAK="$BLURB: "
+		fi
+		echo "${TWEAK}returned code $RETURN: $@" >> "${ABCDETEMPDIR}/errors"
+		return $RETURN # Do not pass go, do not update the status file
+	fi
+	if [ "$BLURB" ]; then
+		echo "$BLURB" >> "${ABCDETEMPDIR}/status"
+	fi
+}
+
+# relpath() and slash() are Copyright (c) 1999 Stuart Ballard and
+# distributed under the terms of the GNU GPL v2 or later, at your option
+
+# Function to determine if a word contains a slash.
+slash ()
+{
+	case "$1" in
+	*/*) return 0;;
+	*) return 1;;
+	esac
+}
+
+# Function to give the relative path from one file to another.
+# Usage: relpath fromfile tofile
+# eg relpath music/Artist/Album.m3u music/Artist/Album/Song.mp3
+# (the result would be Album/Song.mp3)
+# Output is relative path to $2 from $1 on stdout
+
+# This code has the following restrictions:
+# Multiple ////s are not collapsed into single /s, with strange effects.
+# Absolute paths and ../s are handled wrong in FR (but they work in TO)
+# If FR is a directory it must have a trailing /
+
+relpath ()
+{
+	FR="$1"
+	TO="$2"
+
+	case "$TO" in
+	/*) ;; # No processing is needed for absolute paths
+	*)
+		# Loop through common prefixes, ignoring them.
+		while slash "$FR" && [ "$(echo "$FR" | cut -d/ -f1)" = "$(echo "$TO" | cut -d/ -f1)" ]
+		do
+			FR="$(echo "$FR" | cut -d/ -f2-)"
+			TO="$(echo "$TO" | cut -d/ -f2-)"
+		done
+		# Loop through directory portions left in FR, adding appropriate ../s.
+		while slash "$FR"
+		do
+			FR="$(echo "$FR" | cut -d/ -f2-)"
+			TO="../$TO"
+		done
+		;;
+	esac
+
+	echo "$TO"
+}
+
+new_checkexec ()
+{
+	if [ ! "$@" = "" ]; then
+		# Cut off any command-line option we added in
+		X=$(echo "$@" | cut -d' ' -f2)
+		WHICH=$(which "$X" 2>/dev/null)
+		if [ -z "$WHICH" ]; then
+			return 1
+		elif [ ! -x "$WHICH" ]; then
+			return 2
+		fi
+	fi
+	return 0
+}
+
+checkexec ()
+{
+	if [ ! "$@" = "" ]; then
+		# Cut off any command-line option we added in
+		X=$(echo "$@" | cut -d' ' -f2)
+		# Test for built-in abcde.function
+		[ "$X" != "${X#abcde.}" ] && type "$X" >/dev/null 2>&1 && return
+		WHICH=$(which "$X" 2>/dev/null)
+		if [ -z "$WHICH" ]; then
+			log error "$X is not in your path." >&2
+			log info  "Define the full path to the executable if it exists on your system." >&2
+			if [ -e /etc/debian_version ] ; then
+				case $X in
+					oggenc)
+						MISSING_PACKAGE=vorbis-tools
+						;;
+					lame|flac|cd-discid|eject|mkcue|icedax|glyrc)
+						MISSING_PACKAGE=$X
+						;;
+				esac
+				log info "Hint: sudo apt-get install $MISSING_PACKAGE" >&2
+			fi
+			exit 1
+		elif [ ! -x "$WHICH" ]; then
+			log error "$X is not executable." >&2
+			exit 1
+		fi
+	fi
+}
+
+# diffentries <filename> <max_value> <entry1>,<entry2>
+# max_value: the range of entries goes from 1 to <max_value>
+diffentries ()
+{
+	FILENAME=$1
+	shift
+	local CDDBDIFFCHOICES=$1
+	shift
+	local CDDBDIFFCHOICE="$@"
+	if [ ! X"$DIFF" = "X" ]; then
+		PARSECHOICE1=$(echo "$CDDBDIFFCHOICE" | cut -d"," -f1 | xargs printf %d 2>/dev/null)
+		PARSECHOICE2=$(echo "$CDDBDIFFCHOICE" | cut -d"," -f2 | xargs printf %d 2>/dev/null)
+		if [ "$PARSECHOICE1" -lt 1 ] || [ "$PARSECHOICE1" -gt "$CDDBDIFFCHOICES" ] || \
+		   [ "$PARSECHOICE2" -lt 1 ] || [ "$PARSECHOICE2" -gt "$CDDBDIFFCHOICES" ] || \
+		   [ "$PARSECHOICE1" -eq "$PARSECHOICE2" ]; then
+			echo "Invalid diff range." >&2
+			echo "Please select two comma-separated numbers between 1 and $CDDBDIFFCHOICES" >&2
+		else
+			# We parse the 2 choices to diff, store them in temporary files and diff them.
+			for PARSECHOICE in $(echo "$CDDBDIFFCHOICE" | tr , \ ); do
+				do_cddbparse "${ABCDETEMPDIR}/$FILENAME.$PARSECHOICE" > "${ABCDETEMPDIR}/$FILENAME.parsechoice.$PARSECHOICE"
+			done
+			echo "Showing diff between choices $PARSECHOICE1 and $PARSECHOICE2..." > "${ABCDETEMPDIR}/$FILENAME.diff"
+			$DIFF $DIFFOPTS "${ABCDETEMPDIR}/$FILENAME.parsechoice.$PARSECHOICE1" \
+				  "${ABCDETEMPDIR}/$FILENAME.parsechoice.$PARSECHOICE2" >> "${ABCDETEMPDIR}/$FILENAME.diff"
+			page "${ABCDETEMPDIR}/$FILENAME.diff"
+		fi
+	else
+		echo "The diff program was not found in your path." >&2
+		echo "Please choose a number between 0 and $CDDBDIFFCHOICES." >&2
+	fi
+}
+
+# getcddbinfo
+# Finds an specific field from cddbinfo
+getcddbinfo()
+{
+	case $1 in
+	TRACKNAME1)
+		TRACKNAME="$(grep -a "^TTITLE$CDDBTRACKNUM=" "$CDDBDATA" | head -n 1 | cut -f2- -d= | tr -d \[:cntrl:\] | sed 's/\ \+$//')"
+		;;
+	TRACKNAME)
+		TRACKNAME="$(grep -a "^TTITLE$CDDBTRACKNUM=" "$CDDBDATA" | cut -f2- -d= | tr -d \[:cntrl:\] | sed 's/\ \+$//')"
+		;;
+	TRACK-INFO)
+		grep -a "^EXTT$CDDBTRACKNUM=" "$CDDBDATA" | cut -f2- -d= | tr -d \[:cntrl:\] | sed 's/\\n/\n/g'
+		;;
+	esac
+}
+
+# gettracknum
+# Get the track number we are going to use for different actions
+gettracknum()
+{
+	if [ -n "$STARTTRACKNUMBER" ] ; then
+		# Get the trackpadding from the current track, also trim whitespace for MacOSX
+		CURRENTTRACKPADDING=$(echo -n "$UTRACKNUM" | wc -c | tr -d ' ')
+		REALTRACKNUM=$(expr $UTRACKNUM + 0) # Unpad
+		TRACKNUM=$( printf %0.${CURRENTTRACKPADDING}d $((${REALTRACKNUM} + ${STARTTRACKNUMBER} - ${FIRSTTRACK})))
+	else
+		TRACKNUM=${UTRACKNUM}
+	fi
+}
+
+# makeids
+#
+# Calculate cddb disc ids without requiring specialized helper programs.
+# largely copied from cd-discid and musicbrainz examples.  some of the steps
+# don't make sense, but they're necessary to match the ids generated by other
+# programs.
+#
+## FIXME ## Right now, we get 2 frames more than with cue2discid ??
+# data@petit:~$ sh /tmp/cue2discid /home/data/tmp/flac/01.Roisin_Murphy--Ruby_Blue.flac
+# processing offsetimes 00:00:00 04:47:10 08:20:37 11:46:46 17:45:36 21:41:57 27:32:21 32:03:73 35:39:28 38:27:33 43:50:38 44:42:34
+# 980b4b0c 12 150 21685 37687 53146 80061 97782 124071 144448 160603 173208 197438 201334 2895
+# data@petit:~$ metaflac --export-cuesheet-to=- /home/data/tmp/flac/01.Roisin_Murphy--Ruby_Blue.flac| python /home/data/sources/abcde/trunk/examples/cue2discid
+# 980b4b0c 12 150 21685 37687 53146 80061 97782 124071 144448 160603 173208 197438 201334 2893
+#
+# Variables: OFFSETS, TRACKS, LEADOUT, [LEADIN]
+makeids ()
+{
+	if [ X"$LEADOUT" = "X" ]; then
+		log warning "Error trying to calculate disc ids without lead-out information."
+		exit 1
+	fi
+
+	# default to a two second lead-in
+	IDMAGICNUM=150
+	LEADIN=${LEADIN:=150}
+
+	# number of cdframes per second
+	CDFRAMES=75
+
+	# reset cddb checksum for cddb disc-id calululation
+	CDDBCKSUM=0
+
+	COOKEDOFFSETS=""
+	for OFFSET in $OFFSETS
+	do
+		COOKEDOFFSETS="${COOKEDOFFSETS} $(($OFFSET + $LEADIN))"
+
+		OFFSETTIME=$(( ($OFFSET + $LEADIN) / $CDFRAMES  ))
+		while [ $OFFSETTIME -gt 0 ]; do
+			CDDBCKSUM=$(($CDDBCKSUM + $OFFSETTIME % 10))
+			OFFSETTIME=$(($OFFSETTIME / 10))
+		done
+
+	done
+
+	COOKEDOFFSETS="${COOKEDOFFSETS:1}"  # eat the leading space
+
+	PREGAP=$(echo $OFFSETS | cut -f1 -d' ')
+	TOTALTIME=$(( (($LEADOUT + $LEADIN + $PREGAP) / $CDFRAMES) - (($LEADIN + $PREGAP) / $CDFRAMES)))
+
+	vvecho "makeids: PREGAP $PREGAP, LEADIN $LEADIN, LEADOUT $LEADOUT"
+
+	# Calculate both the cddb discid *and* the musicbrainz discid
+	# now. We'll use the cddb discid for reference in most cases
+	# for consistency, but we also have the musicbrainz discid for
+	# when we need it
+	printf -v CDDBDISCID "%08lx" $(( ($CDDBCKSUM % 0xff) * 16777216 | $TOTALTIME * 256 | $TRACKS))
+	CDDBTRACKINFO="${CDDBDISCID} $((TRACKS)) ${COOKEDOFFSETS} $((($LEADOUT + $LEADIN + $IDMAGICNUM) / $CDFRAMES))"
+
+	case $CDDBMETHOD in
+		*musicbrainz*)
+			# FIXME: don't assume the first track is 1
+			MBDISCID=$($MUSICBRAINZ --command calcid --discinfo 1 $TRACKS $LEADIN $(($PREGAP + $LEADOUT)) $OFFSETS)
+			error=$?
+			if [ $error != 0 ]; then
+				log error "$MUSICBRAINZ failed to run; ABORT"
+				exit $error
+			fi
+			MBTRACKINFO="${MBDISCID} $((TRACKS)) ${COOKEDOFFSETS} $((($LEADOUT + $LEADIN + $IDMAGICNUM) / $CDFRAMES))"
+			;;
+	esac
+}
+
+do_replaygain()
+{
+	if checkstatus replaygain; then :; else
+		run_command "" echo "Adding replaygain information..."
+		for TMPOUTPUT in $( echo "$OUTPUTTYPE" | tr , \ )
+		do
+			case $TMPOUTPUT in
+				vorbis|ogg)
+					OUTPUT=$OGGOUTPUTCONTAINER
+					;;
+				opus)
+					OUTPUT=$OPUSOUTPUTCONTAINER
+					;;
+				flac)
+					OUTPUT=$FLACOUTPUTCONTAINER
+					;;
+				*)
+					OUTPUT=$TMPOUTPUT
+					;;
+			esac
+			OUTPUTFILES=""
+			REPLAYINDEX=0
+			for UTRACKNUM in $TRACKQUEUE
+			do
+				CDDBTRACKNUM=$(expr $UTRACKNUM - 1) # Unpad
+				getcddbinfo TRACKNAME
+				splitvarious
+				TRACKFILE="$(mungetrackname "$TRACKNAME")"
+				ARTISTFILE="$(mungeartistname "$TRACKARTIST")"
+				ALBUMFILE="$(mungealbumname "$DALBUM")"
+				GENRE="$(mungegenre "$GENRE")"
+				YEAR=${CDYEAR:-$CDYEAR}
+				gettracknum
+				if [ "$ONETRACK" = "y" ]; then
+					if [ "$VARIOUSARTISTS" = "y" ]; then
+						OUTPUTFILE="$(eval echo \""$VAONETRACKOUTPUTFORMAT"\")"
+					else
+						OUTPUTFILE="$(eval echo \""$ONETRACKOUTPUTFORMAT"\")"
+					fi
+				else
+					if [ "$VARIOUSARTISTS" = "y" ]; then
+						OUTPUTFILE="$(eval echo \""$VAOUTPUTFORMAT"\")"
+					else
+						OUTPUTFILE="$(eval echo \""$OUTPUTFORMAT"\")"
+					fi
+				fi
+				OUTPUTFILES[$REPLAYINDEX]="$OUTPUTDIR/$OUTPUTFILE.$OUTPUT"
+				(( REPLAYINDEX = $REPLAYINDEX + 1 ))
+			done
+			case "$OUTPUT" in
+				flac)
+					run_command "replaygain-flac" nice $ENCNICE $METAFLAC $FLACGAINOPTS "${OUTPUTFILES[@]}"
+					;;
+				vorbis|ogg)
+					run_command "replaygain-vorbis" nice $ENCNICE $VORBISGAIN $VORBISGAINOPTS "${OUTPUTFILES[@]}"
+					;;
+				mp3)
+					run_command "replaygain-mp3" nice $ENCNICE $MP3GAIN $MP3GAINOPTS "${OUTPUTFILES[@]}"
+					;;
+				mpc)
+					run_command "replaygain-mpc" nice $ENCNICE $MPCGAIN "${OUTPUTFILES[@]}"
+					;;
+				wv)
+					run_command "replaygain-wv" nice $ENCNICE $WVGAIN $WVGAINOPTS "${OUTPUTFILES[@]}"
+					;;
+				*);;
+			esac
+		done
+		if checkerrors "replaygain-.{3,6}"; then :; else
+			run_command "replaygain" true
+		fi
+	fi
+}
+
+# This code splits the a Various Artist track name from one of the following
+# forms:
+#
+#  forward:        Artist / Track
+#  forward-dash:   Artist - Track
+#  reverse:        Track / Artist
+#  reverse-dash:   Track - Artist
+#  colon:          Artist: Track
+#  trailing-paren: Artist (Track)
+#
+# variables used:
+# VARIOUSARTISTS, VARIOUSARTISTSTYLE, TRACKNAME, TRACKARTIST
+splitvarious ()
+{
+	if [ "$VARIOUSARTISTS" = "y" ] && [ ! "$ONETRACK" = "y" ]; then
+		case "$VARIOUSARTISTSTYLE" in
+		forward)
+			DTITLEARTIST="$(echo "$TRACKNAME" | sed 's- / -~-g')"
+			TRACKARTIST="$(echo "$DTITLEARTIST" | cut -f1 -d~)"
+			TRACKNAME="$(echo "$DTITLEARTIST" | cut -f2 -d~)"
+			;;
+		forward-dash)
+			DTITLEARTIST="$(echo "$TRACKNAME" | sed 's, - ,~,g')"
+			TRACKARTIST="$(echo "$DTITLEARTIST" | cut -f1 -d~)"
+			TRACKNAME="$(echo "$DTITLEARTIST" | cut -f2 -d~)"
+			;;
+		reverse)
+			DTITLEARTIST="$(echo "$TRACKNAME" | sed 's- / -~-g')"
+			TRACKARTIST="$(echo "$DTITLEARTIST" | cut -f2 -d~)"
+			TRACKNAME="$(echo "$DTITLEARTIST" | cut -f1 -d~)"
+			;;
+		reverse-dash)
+			DTITLEARTIST="$(echo "$TRACKNAME" | sed 's, - ,~,g')"
+			TRACKARTIST="$(echo "$DTITLEARTIST" | cut -f2 -d~)"
+			TRACKNAME="$(echo "$DTITLEARTIST" | cut -f1 -d~)"
+			;;
+		colon)
+			DTITLEARTIST="$(echo "$TRACKNAME" | sed 's-: -~-g')"
+			TRACKARTIST="$(echo "$DTITLEARTIST" | cut -f1 -d~)"
+			TRACKNAME="$(echo "$DTITLEARTIST" | cut -f2 -d~)"
+			;;
+		trailing-paren)
+			DTITLEARTIST="$(echo "$TRACKNAME" | sed 's,^\(.*\) (\(.*\)),\1~\2,')"
+			TRACKARTIST="$(echo "$DTITLEARTIST" | cut -f2 -d~)"
+			TRACKNAME="$(echo "$DTITLEARTIST" | cut -f1 -d~)"
+			;;
+		esac
+	elif [ "$VARIOUSARTISTS" = "y" ] && [ "$ONETRACK" = "y" ]; then
+		TRACKARTIST="Various"
+	else
+		TRACKARTIST="$DARTIST"
+	fi
+}
+
+do_getgenreid () {
+	local genre=$(echo "${@}" | tr 'A-Z' 'a-z')
+	local id=""
+	case ${genre} in
+		"blues")                 id=0 ;;
+		"classic rock")          id=1 ;;
+		"country")               id=2 ;;
+		"dance")                 id=3 ;;
+		"disco")                 id=4 ;;
+		"funk")                  id=5 ;;
+		"grunge")                id=6 ;;
+		"hip-hop")               id=7 ;;
+		"jazz")                  id=8 ;;
+		"metal")                 id=9 ;;
+		"new age")               id=10 ;;
+		"oldies")                id=11 ;;
+		"other")                 id=12 ;;
+		"pop")                   id=13 ;;
+		"r&b")                   id=14 ;;
+		"rap")                   id=15 ;;
+		"reggae")                id=16 ;;
+		"rock")                  id=17 ;;
+		"techno")                id=18 ;;
+		"industrial")            id=19 ;;
+		"alternative")           id=20 ;;
+		"ska")                   id=21 ;;
+		"death metal")           id=22 ;;
+		"pranks")                id=23 ;;
+		"soundtrack")            id=24 ;;
+		"euro-techno")           id=25 ;;
+		"ambient")               id=26 ;;
+		"trip-hop")              id=27 ;;
+		"vocal")                 id=28 ;;
+		"jazz+funk")             id=29 ;;
+		"fusion")                id=30 ;;
+		"trance")                id=31 ;;
+		"classical")             id=32 ;;
+		"instrumental")          id=33 ;;
+		"acid")                  id=34 ;;
+		"house")                 id=35 ;;
+		"game")                  id=36 ;;
+		"sound clip")            id=37 ;;
+		"gospel")                id=38 ;;
+		"noise")                 id=39 ;;
+		"alt. rock")             id=40 ;;
+		"bass")                  id=41 ;;
+		"soul")                  id=42 ;;
+		"punk")                  id=43 ;;
+		"space")                 id=44 ;;
+		"meditative")            id=45 ;;
+		"instrum. pop")          id=46 ;;
+		"instrum. rock")         id=47 ;;
+		"ethnic")                id=48 ;;
+		"gothic")                id=49 ;;
+		"darkwave")              id=50 ;;
+		"techno-indust.")        id=51 ;;
+		"electronic")            id=52 ;;
+		"pop-folk")              id=53 ;;
+		"eurodance")             id=54 ;;
+		"dream")                 id=55 ;;
+		"southern rock")         id=56 ;;
+		"comedy")                id=57 ;;
+		"cult")                  id=58 ;;
+		"gangsta")               id=59 ;;
+		"top 40")                id=60 ;;
+		"christian rap")         id=61 ;;
+		"pop/funk"|"pop / funk") id=62 ;;
+		"jungle")                id=63 ;;
+		"native american")       id=64 ;;
+		"cabaret")               id=65 ;;
+		"new wave")              id=66 ;;
+		"psychadelic")           id=67 ;;
+		"rave")                  id=68 ;;
+		"showtunes")             id=69 ;;
+		"trailer")               id=70 ;;
+		"lo-fi")                 id=71 ;;
+		"tribal")                id=72 ;;
+		"acid punk")             id=73 ;;
+		"acid jazz")             id=74 ;;
+		"polka")                 id=75 ;;
+		"retro")                 id=76 ;;
+		"musical")               id=77 ;;
+		"rock & roll")           id=78 ;;
+		"hard rock")             id=79 ;;
+		"folk")                  id=80 ;;
+		"folk/rock")             id=81 ;;
+		"national folk")         id=82 ;;
+		"swing")                 id=83 ;;
+		"fusion")                id=84 ;;
+		"bebob")                 id=85 ;;
+		"latin")                 id=86 ;;
+		"revival")               id=87 ;;
+		"celtic")                id=88 ;;
+		"bluegrass")             id=89 ;;
+		"avantgarde")            id=90 ;;
+		"gothic rock")           id=91 ;;
+		"progress. rock")        id=92 ;;
+		"psychadel. rock")       id=93 ;;
+		"symphonic rock")        id=94 ;;
+		"slow rock")             id=95 ;;
+		"big band")              id=96 ;;
+		"chorus")                id=97 ;;
+		"easy listening")        id=98 ;;
+		"acoustic")              id=99 ;;
+		"humour")                id=100 ;;
+		"speech")                id=101 ;;
+		"chanson")               id=102 ;;
+		"opera")                 id=103 ;;
+		"chamber music")         id=104 ;;
+		"sonata")                id=105 ;;
+		"symphony")              id=106 ;;
+		"booty bass")            id=107 ;;
+		"primus")                id=108 ;;
+		"porn groove")           id=109 ;;
+		"satire")                id=110 ;;
+		"slow jam")              id=111 ;;
+		"club")                  id=112 ;;
+		"tango")                 id=113 ;;
+		"samba")                 id=114 ;;
+		"folklore")              id=115 ;;
+		"ballad")                id=116 ;;
+		"power ballad")          id=117 ;;
+		"rhythmic soul")         id=118 ;;
+		"freestyle")             id=119 ;;
+		"duet")                  id=120 ;;
+		"punk rock")             id=121 ;;
+		"drum solo")             id=122 ;;
+		"a capella")             id=123 ;;
+		"euro-house")            id=124 ;;
+		"dance hall")            id=125 ;;
+		"goa")                   id=126 ;;
+		"drum & bass")           id=127 ;;
+		"club-house")            id=128 ;;
+		"hardcore")              id=129 ;;
+		"terror")                id=130 ;;
+		"indie")                 id=131 ;;
+		"britpop")               id=132 ;;
+		"negerpunk")             id=133 ;;
+		"polsk punk")            id=134 ;;
+		"beat")                  id=135 ;;
+		"christian gangsta rap") id=136 ;;
+		"heavy metal")           id=137 ;;
+		"black metal")           id=138 ;;
+		"crossover")             id=139 ;;
+		"contemporary christian")id=140 ;;
+		"christian rock")        id=141 ;;
+		"merengue")              id=142 ;;
+		"salsa")                 id=143 ;;
+		"thrash metal")          id=144 ;;
+		"anime")                 id=145 ;;
+		"jpop")                  id=146 ;;
+		"synthpop")              id=147 ;;
+		"rock/pop"|"rock / pop") id=148 ;;
+		*)                       id=255 ;;
+	esac
+echo ${id}
+return 0
+}
+
+# do_tag [tracknumber]
+# id3 tags a filename
+# variables used:
+# TRACKS, TRACKNAME, TRACKARTIST, TAGGER, TAGGEROPTS, VORBISCOMMENT, METAFLAC,
+# COMMENT, DALBUM, DARTIST, CDYEAR, CDGENRE
+do_tag ()
+{
+	COMMENTOUTPUT="$(eval echo "${COMMENT}")"
+	if [ -z "$COMMENTOUTPUT" ]; then
+		COMMENTOUTPUT="$(getcddbinfo TRACK-INFO)"
+	fi
+	CDDBDISCID=$(echo "$CDDBTRACKINFO" | cut -d' ' -f1)
+	run_command "" echo "Tagging track $1 of $TRACKS: $TRACKNAME..."
+	# If we want to start the tracks with a given number, we need to modify the
+	# TRACKNUM value before evaluation
+	if [ -n "$STARTTRACKNUMBERTAG" ] ; then
+		gettracknum
+	fi
+	for OUTPUT in $(echo "$OUTPUTTYPE" | tr , \ )
+	do
+		case "$OUTPUT" in
+		mp3)
+			# id3v2 v0.1.9 claims to have solved the -c bug, so we merge both id3 and id3v2
+			GENREID=$(do_getgenreid "${CDGENRE}")
+			# Set TPE2 in case we have a Various Artists rip.
+			TPE2=""
+			if [ "$VARIOUSARTISTS" = "y" ]; then
+				TPE2="Various"
+			fi
+
+			case "$ID3SYNTAX" in
+				id3)
+					run_command "tagtrack-$OUTPUT-$1" nice $ENCNICE \
+						$TAGGER $TAGGEROPTS -c "$COMMENTOUTPUT" \
+						-A "$DALBUM" -a "$TRACKARTIST" -t "$TRACKNAME" \
+						-y "$CDYEAR" -g "$GENREID" \
+						-T "${TRACKNUM:-$1}" \
+						"${ABCDETEMPDIR}/track$1.$OUTPUT"
+					;;
+				id3v2)
+					# FIXME # track numbers in mp3 come with 1/10, so we cannot
+					# happily substitute them with $TRACKNUM
+					run_command "tagtrack-$OUTPUT-$1" nice $ENCNICE \
+						$TAGGER $TAGGEROPTS -c "$COMMENTOUTPUT" \
+						-A "$DALBUM" -a "$TRACKARTIST" -t "$TRACKNAME" \
+						-y "$CDYEAR" -g "$GENREID" \
+						-T "${TRACKNUM:-$1}/$TRACKS" \
+						${TPE2:+--TPE2 "$TPE2"} \
+						"${ABCDETEMPDIR}/track$1.$OUTPUT"
+					;;
+				id3tag)
+					# FIXME # track numbers in mp3 come with 1/10, so we cannot
+					# happily substitute them with $TRACKNUM
+					run_command "tagtrack-$OUTPUT-$1" nice $ENCNICE \
+						$TAGGER $TAGGEROPTS -c "$COMMENTOUTPUT" \
+						-A "$DALBUM" -a "$TRACKARTIST" -s "$TRACKNAME" \
+						-y "$CDYEAR" -g "$GENREID" \
+						-t "${TRACKNUM:-$1}" ${TRACKNUM:+-T "$TRACKS"} \
+						"${ABCDETEMPDIR}/track$1.$OUTPUT"
+					;;
+				eyed3*)
+					# FIXME # track numbers in mp3 come with 1/10, so we cannot
+					# happily substitute them with $TRACKNUM
+					case "$ID3SYNTAX" in
+						eyed3_06) addopts=( \
+							${ENCODING:+--set-encoding="$ENCODING"} \
+							${TPE2:+--set-text-frame=TPE2:"$TPE2"} \
+					# We set 'recording-date' so the date tag will show 
+					# in Audacious, vlc and friends...          Andrew.
+							${CDYEAR:+--set-text-frame="TDRC:$CDYEAR"} \
+							${COMMENTOUTPUT:+--comment=::"$COMMENTOUTPUT"} \
+							);;
+						*) addopts=( \
+							${ENCODING:+--encoding="$ENCODING"} \
+							${TPE2:+--text-frame=TPE2:"$TPE2"} \
+					# We set 'recording-date' so the date tag will show 
+					# in Audacious, vlc and friends...           Andrew.
+							${CDYEAR:+--text-frame="TDRC:$CDYEAR"} \
+							${COMMENTOUTPUT:+--comment "$COMMENTOUTPUT"} \
+							);;
+					esac
+					run_command "tagtrack-$OUTPUT-$1" nice $ENCNICE $TAGGER $TAGGEROPTS \
+						-A "$DALBUM" \
+						-a "$TRACKARTIST" -t "$TRACKNAME" \
+						-G "$GENREID" -n "${TRACKNUM:-$1}" \
+						${TRACKNUM:+-N "$TRACKS"} \
+						"${addopts[@]}" \
+						"${ABCDETEMPDIR}/track$1.$OUTPUT"
+					;;
+				*)
+					log error "Internal error: ID3SYNTAX has an illegal value"
+					exit 1
+					;;
+			esac
+			;;
+		vorbis|ogg)
+			case "$OGGENCODERSYNTAX" in
+				vorbize|oggenc)
+					# vorbiscomment can't do in-place modification, mv the file first
+					if [ -f "${ABCDETEMPDIR}/track$1.$OGGOUTPUTCONTAINER" ] && \
+						   [ ! -f "${ABCDETEMPDIR}/track$1.uncommented.$OGGOUTPUTCONTAINER" ]; then
+						mv "${ABCDETEMPDIR}/track$1.$OGGOUTPUTCONTAINER" \
+						   "${ABCDETEMPDIR}/track$1.uncommented.$OGGOUTPUTCONTAINER"
+					fi
+					(
+					# These are from
+					# https://www.xiph.org/vorbis/doc/v-comment.html
+
+					echo ARTIST="$TRACKARTIST"
+					echo ALBUM="$DALBUM"
+					echo TITLE="$TRACKNAME"
+					if [ -n "$CDYEAR" ]; then
+						echo DATE="$CDYEAR"
+					fi
+					if [ -n "$CDGENRE" ]; then
+						echo GENRE="$CDGENRE"
+					fi
+					echo TRACKNUMBER="${TRACKNUM:-$1}"
+					# TRACKTOTAL is not in the proposed, minimal list of standard field names from
+					# xiph.org: https://www.xiph.org/vorbis/doc/v-comment.html but is in common usage
+					# and read by mediainfo, ffprobe, vlc, Aqualung, ogg123, Foobar. And now abcde :)
+					# The tag is quietly ignored by  Audacious, MPlayer, mpv, XMMS....
+					echo TRACKTOTAL="${TRACKS}"
+					if [ -n "$DISCNUMBER" ]; then
+						echo DISCNUMBER="$DISCNUMBER"
+					fi
+					echo CDDB="${CDDBDISCID}"
+					if [ "$(eval echo ${COMMENT})" != "" ]; then
+						case "$COMMENTOUTPUT" in
+							*=*) echo "$COMMENTOUTPUT";;
+							*)   echo COMMENT="$COMMENTOUTPUT";;
+						esac
+					fi
+					) | run_command "tagtrack-$OUTPUT-$1" nice $ENCNICE \
+						$VORBISCOMMENT $VORBISCOMMENTOPTS -w \
+						"${ABCDETEMPDIR}/track$1.uncommented.$OGGOUTPUTCONTAINER" \
+						"${ABCDETEMPDIR}/track$1.$OGGOUTPUTCONTAINER"
+					# Doublecheck that the commented file was created
+					# successfully before wiping the original
+					if [ -f "${ABCDETEMPDIR}/track$1.$OGGOUTPUTCONTAINER" ]; then
+						rm -f "${ABCDETEMPDIR}/track$1.uncommented.$OGGOUTPUTCONTAINER"
+					else
+						mv "${ABCDETEMPDIR}/track$1.uncommented.$OGGOUTPUTCONTAINER" \
+						   "${ABCDETEMPDIR}/track$1.$OGGOUTPUTCONTAINER"
+					fi
+					;;
+			esac
+			;;
+		opus)
+			run_command "tagtrack-$OUTPUT-$1" true
+			;;
+		mka)
+			run_command "tagtrack-$OUTPUT-$1" true
+			;;
+		aiff)
+			run_command "tagtrack-$OUTPUT-$1" true
+			;;
+		flac)
+			(
+			echo ARTIST="$TRACKARTIST"
+			echo ALBUM="$DALBUM"
+			echo TITLE="$TRACKNAME"
+			if [ -n "$CDYEAR" ]; then
+				echo DATE="$CDYEAR"
+			fi
+			if [ -n "$CDGENRE" ]; then
+				echo GENRE="$CDGENRE"
+			fi
+			echo TRACKNUMBER="${TRACKNUM:-$1}"
+			# TRACKTOTAL is not in the proposed, minimal list of standard field names from
+			# xiph.org: https://www.xiph.org/vorbis/doc/v-comment.html but is in common usage
+			# and read by mediainfo, ffprobe, vlc, Aqualung, ogg123, Foobar. And now abcde :)
+			# The tag is quietly ignored by  Audacious, MPlayer, mpv, XMMS....
+			echo TRACKTOTAL="${TRACKS}"
+			if [ -n "$DISCNUMBER" ]; then
+				echo DISCNUMBER="$DISCNUMBER"
+			fi
+			echo CDDB="${CDDBDISCID}"
+			if [ -n "$(eval echo "${COMMENT}")" ]; then
+				case "$COMMENTOUTPUT" in
+					*=*) echo "$COMMENTOUTPUT";;
+					*)   echo COMMENT="$COMMENTOUTPUT";;
+				esac
+			fi
+			) | run_command "tagtrack-$OUTPUT-$1" nice $ENCNICE $METAFLAC $METAFLACOPTS \
+							${IMPORTCUESHEET:+--import-cuesheet-from="${ABCDETEMPDIR}/$CUEFILE"} \
+							--import-tags-from=- "${ABCDETEMPDIR}/track$1.$FLACOUTPUTCONTAINER"
+			;;
+		spx)
+			run_command "tagtrack-$OUTPUT-$1" true
+			;;
+		mpc)
+			run_command "tagtrack-$OUTPUT-$1" true
+			;;
+		wv)
+			run_command "tagtrack-$OUTPUT-$1" true
+ 			;;
+		ape)
+			# This tagging syntax is suitable for Robert Muth's application 'apetag', the Monkey's Audio 
+			# Console port (mac) used for encoding does not have the ability to tag.
+			run_command "tagtrack-$OUTPUT-$1" nice $ENCNICE "$APETAG" -i "${ABCDETEMPDIR}/track$1.ape" -m overwrite \
+						-p artist="$TRACKARTIST" -p album="$DALBUM" -p title="$TRACKNAME" -p track="${TRACKNUM:-$1}" \
+						-p year="$CDYEAR" -p genre="$CDGENRE" ${COMMENTOUTPUT:+-p comment="$COMMENTOUTPUT"} 
+ 			;;
+ 		mp2)
+			# Using Mutagen's mid3v2 for tagging with id3v2.4.0. Interesting enough vlc, MPlayer and XMMS ignore
+			# these tags but they are read by Audacious, Xine, Aqualung, mediainfo, ffplay, ffprobe. FFmpeg does
+			# not currently tag mp2 audio so twolame and FFmpeg will both use mid3v2...
+			run_command "tagtrack-$OUTPUT-$1" nice $ENCNICE "$MID3V2" --verbose -A "$DALBUM" \
+						-a "$TRACKARTIST" -t "$TRACKNAME" -y "$CDYEAR" -g "$CDGENRE" \
+						-T "${TRACKNUM:-$1}/$TRACKS" ${TPE2:+--TPE2 "$TPE2"} \
+						${COMMENTOUTPUT:+--comment="$COMMENTOUTPUT"} \
+						"${ABCDETEMPDIR}/track$1.mp2"
+			;;
+		aac)
+			run_command "tagtrack-$OUTPUT-$1" true
+			;;
+		m4a)
+			case "$AACENCODERSYNTAX" in
+				fdkaac)
+					# We will use inline tagging...
+					run_command "tagtrack-$OUTPUT-$1" true
+					;;
+				neroAacEnc)
+					# Tag post encode with neroAacTag...
+					run_command "tagtrack-$OUTPUT-$1" nice $ENCNICE "$NEROAACTAG" \
+								"${ABCDETEMPDIR}/track$1.m4a" \
+								-meta:artist="$TRACKARTIST" -meta:album="$DALBUM" \
+								-meta:title="$TRACKNAME" -meta:track="${TRACKNUM:-$1}" \
+								-meta:year="$CDYEAR" -meta:genre="$CDGENRE" -meta:comment="$COMMENT"
+					;;
+				faac)
+					run_command "tagtrack-$OUTPUT-$1" true
+					;;
+				qaac)
+					run_command "tagtrack-$OUTPUT-$1" true
+					;;
+				fhgaacenc)
+					# Tag post encode with AtomicParsley. Note that previous problems with seg fault when using
+					# 'overWrite' cannot be reproduced with newer versions: https://bitbucket.org/wez/atomicparsley
+					run_command "tagtrack-$OUTPUT-$1" nice $ENCNICE "$ATOMICPARSLEY" \
+								"${ABCDETEMPDIR}/track$1.m4a" --artist="$TRACKARTIST" --album="$DALBUM" \
+								--title="$TRACKNAME" --tracknum="${TRACKNUM:-$1}" \
+								--year="$CDYEAR" --genre="$CDGENRE" --comment="$COMMENT" \
+								$ATOMICPARSLEYOPTS --overWrite
+					;;
+				ffmpeg)
+					run_command "tagtrack-$OUTPUT-$1" true
+				;;
+			esac
+			;;
+		tta)
+			# We use mid3v2 tagging for True Audio:
+			run_command "tagtrack-$OUTPUT-$1" nice $ENCNICE "$MID3V2" --verbose -A "$DALBUM" \
+						-a "$TRACKARTIST" -t "$TRACKNAME" -y "$CDYEAR" -g "$CDGENRE" \
+						-T "${TRACKNUM:-$1}/$TRACKS" ${TPE2:+--TPE2 "$TPE2"} \
+						${COMMENTOUTPUT:+--comment="$COMMENTOUTPUT"} "${ABCDETEMPDIR}/track$1.tta"
+			;;
+		wav)
+			run_command "tagtrack-$OUTPUT-$1" true
+			;;
+		esac
+	done
+	if checkerrors "tagtrack-(.{3,6})-$1"; then :; else
+		run_command "tagtrack-$1" true
+	fi
+}
+
+# do_nogap_encode
+# variables used:
+# OUTPUTTYPE, {FOO}ENCODERSYNTAX, ENCNICE, ENCODER, ENCODEROPTS
+do_nogap_encode ()
+{
+	# The commands here don't go through run_command because they're never
+	# supposed to be silenced
+	echo "Encoding gapless MP3 tracks: $TRACKQUEUE"
+	for OUTPUT in $(echo "$OUTPUTTYPE" | tr , \ )
+	do
+		case "$OUTPUT" in
+		mp3)
+			case "$MP3ENCODERSYNTAX" in
+			lame)
+				(
+					cd "${ABCDETEMPDIR}"
+					TRACKFILES=
+					for THISTRACKNUM in $TRACKQUEUE
+					do
+						TRACKFILES="$TRACKFILES track$THISTRACKNUM.wav"
+					done
+					nice $ENCNICE $MP3ENCODER $MP3ENCODEROPTS --nogap $TRACKFILES
+					RETURN=$?
+					if [ "$RETURN" != "0" ]; then
+						echo "nogap-encode: $MP3ENCODER returned code $RETURN" >> "${ABCDETEMPDIR}/errors"
+					else
+						for THISTRACKNUM in $TRACKQUEUE
+						do
+							run_command "encodetrack-$OUTPUT-$THISTRACKNUM" true
+						done
+					fi
+				)
+				;;
+			esac
+			;;
+		esac
+	done
+	if checkerrors "nogap-encode"; then :; else
+		if [ ! "$KEEPWAVS" = "y" ] ; then
+			if [ ! "$KEEPWAVS" = "move" ] ; then
+				rm -f "$IN"
+			fi
+		fi
+	fi
+	# Other encoders fall through to normal encoding as the tracks have not
+	# been entered in the status file.
+}
+
+# do_encode [tracknumber] [hostname]
+# If no hostname is specified, encode locally
+# variables used:
+# TRACKS, TRACKNAME, TRACKARTIST, DISTMP3, DISTMP3OPTS, {FOO}ENCODERSYNTAX, OUTPUTTYPE, ENCODEROPTS, 
+# DALBUM, DARTIST, ENCNICE, CDYEAR, CDGENRE, COMMENT
+do_encode ()
+{
+	if [ "$USEPIPES" = "y" ]; then
+		case "$OUTPUT" in
+			mp3)
+				TEMPARG="PIPE_$MP3ENCODERSYNTAX"
+				;;
+			vorbis|ogg)
+				TEMPARG="PIPE_$OGGENCODERSYNTAX"
+				;;
+			opus)
+				TEMPARG="PIPE_$OPUSENCODERSYNTAX"
+				;;
+			mka)
+				TEMPARG="PIPE_$MKAENCODERSYNTAX"
+				;;
+			aiff)
+				TEMPARG="PIPE_$AIFFENCODERSYNTAX"
+				;;
+			flac)
+				TEMPARG="PIPE_$FLACENCODERSYNTAX"
+				;;
+			spx)
+				TEMPARG="PIPE_$SPEEXENCODER"
+				;;
+			mpc)
+				TEMPARG="PIPE_$MPCENCODER"
+				;;
+			wv)
+				TEMPARG="PIPE_$WVENCODERSYNTAX"
+				;;
+			tta)
+				TEMPARG="PIPE_$TTAENCODERSYNTAX"
+				;;
+			aac)
+				TEMPARG="PIPE_$AACENCODERSYNTAX"
+				;;
+			m4a)
+				TEMPARG="PIPE_$AACENCODERSYNTAX"
+				;;
+		esac
+		IN="$( eval echo "\$$TEMPARG" )"
+	else
+		IN="${ABCDETEMPDIR}/track$1.wav"
+	fi
+	# We need IN to proceed, if we are not using pipes.
+	if [ -s "$IN" ] || [ X"$USEPIPES" = "Xy" ] ; then
+		for TMPOUTPUT in $(echo "$OUTPUTTYPE" | tr , \ )
+		do
+			case "$TMPOUTPUT" in
+				vorbis|ogg)
+					OUTPUT=$OGGOUTPUTCONTAINER
+					;;
+				opus)
+					OUTPUT=$OPUSOUTPUTCONTAINER
+					;;
+				mka)
+					OUTPUT=$MKAOUTPUTCONTAINER
+					;;
+				aiff)
+					OUTPUT=$AIFFOUTPUTCONTAINER
+					;;
+				flac)
+					OUTPUT=$FLACOUTPUTCONTAINER
+					;;
+				*)
+					OUTPUT=$TMPOUTPUT
+					;;
+			esac
+			OUT="${ABCDETEMPDIR}/track$1.$OUTPUT"
+			if [ "$NOGAP" = "y" ] && checkstatus "encodetrack-$OUTPUT-$1" ; then
+				continue
+			fi
+			if [ X"$USEPIPES" = "Xy" ]; then
+				RUN_COMMAND=""
+				# We need a way to store the creation of the files when using PIPES
+				RUN_COMMAND_PIPES="run_command encodetrack-$OUTPUT-$1 true"
+				# When piping it does not make sense to have a higher nice for
+				# reading than for encoding, since it will be hold by the
+				# encoding process. Setting an effective nice, to calm down a
+				# bit the reading process.
+				EFFECTIVE_NICE=$READNICE
+			else
+				run_command "" echo "Encoding track $1 of $TRACKS: $TRACKNAME..."
+				RUN_COMMAND="run_command encodetrack-$OUTPUT-$1"
+				EFFECTIVE_NICE=$ENCNICE
+			fi
+			case "$OUTPUT" in
+			mp3)
+				case "$2" in
+				%local*%)
+					case "$MP3ENCODERSYNTAX" in
+					lame|gogo) $RUN_COMMAND nice $EFFECTIVE_NICE $MP3ENCODER $MP3ENCODEROPTS "$IN" "$OUT" ;;
+					bladeenc) $RUN_COMMAND nice $EFFECTIVE_NICE $MP3ENCODER $MP3ENCODEROPTS -quit "$IN" "$OUT" ;;
+					l3enc|xingmp3enc) $RUN_COMMAND nice $EFFECTIVE_NICE $MP3ENCODER "$IN" "$OUT" $MP3ENCODEROPTS ;;
+					mp3enc) $RUN_COMMAND nice $EFFECTIVE_NICE $MP3ENCODER -if "$IN" -of "$OUT" $MP3ENCODEROPTS ;;
+					esac
+					;;
+				*)
+					$RUN_COMMAND nice $DISTMP3NICE $DISTMP3 $DISTMP3OPTS "$2" "$IN" "$OUT" >/dev/null 2>&1
+					;;
+				esac
+				;;
+			vorbis|ogg)
+				case "$2" in
+				%local*%)
+					case "$OGGENCODERSYNTAX" in
+					vorbize) $RUN_COMMAND nice $EFFECTIVE_NICE $OGGENCODER $OGGENCODEROPTS -w "$OUT" "$IN" ;;
+					oggenc) $RUN_COMMAND nice $EFFECTIVE_NICE $OGGENCODER $OGGENCODEROPTS -o "$OUT" "$IN" ;;
+					esac
+					;;
+				*)
+					$RUN_COMMAND nice $DISTMP3NICE $DISTMP3 $DISTMP3OPTS "$2" "$IN" "$OUT" >/dev/null 2>&1
+					;;
+				esac
+				;;
+			opus)
+				case "$2" in
+				%local*%)
+					case "$OPUSENCODERSYNTAX" in
+					opusenc)
+					# Tag the file at encode time, as it can't be done after encoding.
+						if [ "$DOTAG" = "y" ]; then
+							$RUN_COMMAND nice $EFFECTIVE_NICE $OPUSENCODER $OPUSENCODEROPTS \
+										 --artist "$TRACKARTIST" --album "$DALBUM" --title "$TRACKNAME" \
+										 --genre "$CDGENRE" --date "$CDYEAR" --comment TRACKNUMBER="$1" \
+										 ${COMMENT:+--comment COMMENT="$COMMENT"} "$IN" "$OUT"
+						else
+							$RUN_COMMAND nice $EFFECTIVE_NICE $OPUSENCODER $OPUSENCODEROPTS "$IN" "$OUT"
+						fi
+					;;
+					esac
+					;;
+				*)
+					$RUN_COMMAND nice $DISTMP3NICE $DISTMP3 $DISTMP3OPTS "$2" "$IN" "$OUT" >/dev/null 2>&1
+					;;
+				esac
+				;;
+			mka)
+				case "$MKAENCODERSYNTAX" in
+				ffmpeg)
+					if [ "$DOTAG" = "y" ]; then
+						$RUN_COMMAND nice $EFFECTIVE_NICE $MKAENCODER -i "$IN" $MKAENCODEROPTS \
+									 -metadata artist="$TRACKARTIST" -metadata album="$DALBUM" \
+									 -metadata title="$TRACKNAME" -metadata track="${TRACKNUM:-$1}" \
+									 -metadata date="$CDYEAR" -metadata genre="$CDGENRE" \
+									 -metadata comment="$COMMENT" "$OUT"
+					else
+						$RUN_COMMAND nice $EFFECTIVE_NICE $MKAENCODER -i "$IN" $MKAENCODEROPTS "$OUT"
+					fi
+				;;
+				esac
+				;;
+			aiff)
+				case "$AIFFENCODERSYNTAX" in
+				ffmpeg)
+					if [ "$DOTAG" = "y" ]; then
+						$RUN_COMMAND nice $EFFECTIVE_NICE $AIFFENCODER -i "$IN" $AIFFENCODEROPTS \
+									 -metadata artist="$TRACKARTIST" -metadata album="$DALBUM" \
+									 -metadata title="$TRACKNAME" -metadata track="${TRACKNUM:-$1}" \
+									 -metadata date="$CDYEAR" -metadata genre="$CDGENRE" \
+									 -metadata comment="$COMMENT" "$OUT"
+					else
+						$RUN_COMMAND nice $EFFECTIVE_NICE $AIFFENCODER -i "$IN" $AIFFENCODEROPTS "$OUT"
+					fi
+				;;
+				esac
+				;;
+			flac)
+				case "$2" in
+				%local*%)
+					case "$FLACENCODERSYNTAX" in
+					flac) $RUN_COMMAND nice $EFFECTIVE_NICE $FLACENCODER -f $FLACENCODEROPTS -o "$OUT" "$IN" ;;
+						esac
+						;;
+					*)
+						vecho -n "DISTMP3:"
+						vecho "$DISTMP3 $DISTMP3OPTS $2 $IN $OUT >/dev/null 2>&1"
+						$RUN_COMMAND nice $DISTMP3NICE $DISTMP3 $DISTMP3OPTS "$2" "$IN" "$OUT" > /dev/null 2>&1
+					;;
+				esac
+				;;
+			spx)
+				if [ -n "$(eval echo "${COMMENT}")" ]; then
+					case "$COMMENT" in
+						*=*) ;;
+						*)   COMMENT="COMMENT=$COMMENT" ;;
+					esac
+				fi
+				# Tag the file at encode time, as it can't be done after encoding.
+				if [ "$DOTAG" = "y" ]; then
+					$RUN_COMMAND nice $EFFECTIVE_NICE $SPEEXENCODER $SPEEXENCODEROPTS \
+								 --author "$TRACKARTIST" --title "$TRACKNAME" \
+								 ${COMMENT:+--comment "$COMMENT"} "$IN" "$OUT"
+				else
+					$RUN_COMMAND nice $EFFECTIVE_NICE $SPEEXENCODER $SPEEXENCODEROPTS "$IN" "$OUT"
+				fi
+				;;
+			mpc)
+				# Tag the file inline at encode time.
+				if [ "$DOTAG" = "y" ]; then
+					$RUN_COMMAND nice $EFFECTIVE_NICE $MPCENCODER $MPCENCODEROPTS \
+								 --artist "$TRACKARTIST" --album "$DALBUM" \
+								 --title "$TRACKNAME" --track "$1" --genre "$CDGENRE" \
+								 --year "$CDYEAR" ${COMMENT:+--comment "$COMMENT"} "$IN" "$OUT"
+				else
+					$RUN_COMMAND nice $EFFECTIVE_NICE $MPCENCODER $MPCENCODEROPTS "$IN" "$OUT"
+				fi
+				;;
+			tta)
+				case "$TTAENCODERSYNTAX" in
+				# tta is the newer version with a small syntax change...
+					tta)
+					$RUN_COMMAND nice $EFFECTIVE_NICE $TTAENCODER -e $TTAENCODEROPTS "$IN" "$OUT"
+					;;
+					ttaenc)
+					$RUN_COMMAND nice $EFFECTIVE_NICE $TTAENCODER -e $TTAENCODEROPTS "$IN" -o "$OUT"
+					;;
+				esac
+				;;
+			wv)
+			case "$WVENCODERSYNTAX" in
+				wavpack)
+					if [ "$DOTAG" = "y" ]; then
+						$RUN_COMMAND nice $EFFECTIVE_NICE $WVENCODER $WVENCODEROPTS \
+									 -w Artist="$TRACKARTIST" -w Album="$DALBUM" \
+									 -w Title="$TRACKNAME" -w Track="$1" -w Genre="$CDGENRE" \
+									 -w Year="$CDYEAR" ${COMMENT:+-w Comment="$COMMENT"} "$IN" -o "$OUT"
+					else
+						$RUN_COMMAND nice $EFFECTIVE_NICE $WVENCODER $WVENCODEROPTS "$IN" -o "$OUT"
+					fi
+				;;
+				ffmpeg)
+					if [ "$DOTAG" = "y" ]; then
+						$RUN_COMMAND nice $EFFECTIVE_NICE $WVENCODER -i "$IN" $WVENCODEROPTS \
+									 -metadata artist="$TRACKARTIST" \
+									 -metadata album="$DALBUM" -metadata title="$TRACKNAME" \
+									 -metadata track="${TRACKNUM:-$1}" -metadata date="$CDYEAR" \
+									 -metadata genre="$CDGENRE" -metadata comment="$COMMENT" "$OUT" 
+					else 
+						$RUN_COMMAND nice $EFFECTIVE_NICE $WVENCODER -i "$IN" $WVENCODEROPTS "$OUT"
+					fi
+				;;
+			esac
+				;;
+			ape)
+				$RUN_COMMAND nice $EFFECTIVE_NICE $APENCODER "$IN" "$OUT" $APENCODEROPTS
+				;;
+			mp2)
+				case "$MP2ENCODERSYNTAX" in
+					twolame)
+						$RUN_COMMAND nice $EFFECTIVE_NICE $MP2ENCODER $MP2ENCODEROPTS "$IN" "$OUT"
+						;;
+					ffmpeg)
+						$RUN_COMMAND nice $EFFECTIVE_NICE $MP2ENCODER -i "$IN" $MP2ENCODEROPTS "$OUT" 
+						;;
+				esac
+				;;
+			aac)
+				# aac container is only used to catch faac encoded files where faac 
+				# is compiled without mp4 support (with libmp4v2).
+				$RUN_COMMAND nice $EFFECTIVE_NICE $AACENCODER $AACENCODEROPTS -o "$OUT" "$IN"
+				;;
+			m4a)
+				case "$AACENCODERSYNTAX" in
+					faac)
+						if [ "$DOTAG" = "y" ]; then
+							$RUN_COMMAND nice $EFFECTIVE_NICE $AACENCODER $AACENCODEROPTS  \
+										 --artist "$TRACKARTIST" --album "$DALBUM" \
+										 --title "$TRACKNAME" --track "${TRACKNUM:-$1}" \
+										 --year "$CDYEAR" --genre "$CDGENRE" --comment "$COMMENT" -o "$OUT" "$IN"
+						else 
+							$RUN_COMMAND nice $EFFECTIVE_NICE $AACENCODER $AACENCODEROPTS -o "$OUT" "$IN" 	
+						fi
+						;;
+					neroAacEnc)
+						$RUN_COMMAND nice $EFFECTIVE_NICE $AACENCODER $AACENCODEROPTS -if "$IN" -of "$OUT"
+						;;
+					fdkaac)      
+						if [ "$DOTAG" = "y" ]; then
+							$RUN_COMMAND nice $EFFECTIVE_NICE $AACENCODER $AACENCODEROPTS \
+										 --artist "$TRACKARTIST" --album "$DALBUM" \
+										 --title "$TRACKNAME" --track "$1" --genre "$CDGENRE" \
+										 --date "$CDYEAR" --comment "$COMMENT" "$IN" -o "$OUT"
+						else
+							$RUN_COMMAND nice $EFFECTIVE_NICE $AACENCODER $AACENCODEROPTS "$IN" -o "$OUT"
+						fi
+						;;
+					qaac)
+						if [ "$DOTAG" = "y" ]; then
+							$RUN_COMMAND nice $EFFECTIVE_NICE $WINE $AACENCODER $AACENCODEROPTS \
+										 --artist "$TRACKARTIST" --album "$DALBUM" \
+										 --title "$TRACKNAME" --track "${TRACKNUM:-$1}" \
+										 --date "$CDYEAR" --genre "$CDGENRE" --comment "$COMMENT" -o "$OUT" "$IN"
+						else 
+							$RUN_COMMAND nice $EFFECTIVE_NICE $WINE $AACENCODER $AACENCODEROPTS -o "$OUT" "$IN"
+						fi
+						;;
+					fhgaacenc)
+						$RUN_COMMAND nice $EFFECTIVE_NICE $WINE $AACENCODER $AACENCODEROPTS "$IN" "$OUT"
+						;;
+					ffmpeg)
+						if [ "$DOTAG" = "y" ]; then
+							$RUN_COMMAND nice $EFFECTIVE_NICE $AACENCODER -i "$IN" \
+										 $AACENCODEROPTS -metadata artist="$TRACKARTIST" \
+										 -metadata album="$DALBUM" -metadata title="$TRACKNAME" \
+										 -metadata track="${TRACKNUM:-$1}" -metadata date="$CDYEAR" \
+										 -metadata genre="$CDGENRE" -metadata comment="$COMMENT" "$OUT" 
+						else 
+							$RUN_COMMAND nice $EFFECTIVE_NICE $AACENCODER -i "$IN"  $AACENCODEROPTS "$OUT"
+						fi
+						;;
+					esac
+				;;
+			wav)
+				# In case of wav output we need nothing. Just keep the wavs.
+				# But we need the following to allow full logging and subsequent 
+				# successful cleaning of ${ABCDETEMPDIR}.
+				echo "encodetrack-$OUTPUT-$UTRACKNUM" >> "${ABCDETEMPDIR}/status"
+				;;
+			esac
+			$RUN_COMMAND_PIPES
+		done
+		# Only remove .wav if the encoding succeeded
+		if checkerrors "encodetrack-(.{3,6})-$1"; then :; else
+			run_command "encodetrack-$1" true
+			if [ ! "$KEEPWAVS" = "y" ] ; then
+				if [ ! "$KEEPWAVS" = "move" ] ; then
+					rm -f "$IN"
+				fi
+			fi
+		fi
+	else
+		run_command "" echo "HEH! The file we were about to encode disappeared:"
+		run_command "" echo ">> $IN"
+		run_command "encodetrack-$1" false
+	fi
+}
+
+# do_preprocess [tracknumber]
+# variables used:
+# TRACKS, TRACKNAME, TRACKARTIST, DISTMP3, DISTMP3OPTS, {FOO}ENCODERSYNTAX,
+# OUTPUTTYPE, ENCODEROPTS, DALBUM, DARTIST, ENCNICE, CDYEAR, CDGENRE, COMMENT
+#do_preprocess ()
+#{
+#	IN="${ABCDETEMPDIR}/track$1.wav"
+#	# We need IN to proceed.
+#	if [ -s "$IN" ] ; then
+#		for OUTPUT in $(echo $OUTPUTTYPE | tr , \ )
+#		do
+#			#OUT="${ABCDETEMPDIR}/track$1.$OUTPUT"
+#			run_command "" echo "Pre-processing track $1 of $TRACKS..."
+#			case "$POSTPROCESSFORMAT" in
+#			all|wav*)
+#				run_command "preprocess-$OUTPUT-$1" nice $PRENICE $WAV_PRE $IF $OF ;;
+#			mp3)
+#				run_command "preprocess-$OUTPUT-$1" nice $PRENICE $MP3_PRE $IF $OF ;;
+#			ogg)
+#				run_command "preprocess-$OUTPUT-$1" nice $PRENICE $OGG_PRE $IF $OF ;;
+#			flac)
+#				run_command "preprocess-$OUTPUT-$1" nice $PRENICE $FLAC_PRE $IF $OF ;;
+#			spx)
+#				run_command "preprocess-$OUTPUT-$1" nice $PRENICE $SPX_PRE $IF $OF ;;
+#			esac
+#		done
+#		# Only remove .wav if the encoding succeeded
+#		if checkerrors "preprocess-(.{3,4})-$1"; then
+#			run_command "preprocess-$1" false
+#		else
+#			run_command "preprocess-$1" true
+#		fi
+#	else
+#		if [ "$(checkstatus encode-output)" = "loud" ]; then
+#			echo "HEH! The file we were about to pre-process disappeared:"
+#			echo ">> $IN"
+#		fi
+#		run_command "preprocess-$1" false
+#	fi
+#}
+
+
+# do_postprocess [tracknumber]
+# variables used:
+# TRACKS, TRACKNAME, TRACKARTIST, DISTMP3, DISTMP3OPTS, {FOO}ENCODERSYNTAX, OUTPUTTYPE, ENCODEROPTS, 
+# DALBUM, DARTIST, ENCNICE, CDYEAR, CDGENRE, COMMENT
+#do_postprocess ()
+#{
+#	for POSTPROCESSFORMAT in $(echo $POSTPROCESSFORMATS | tr , \ )
+#	do
+#		IN="${ABCDETEMPDIR}/track$1.$POSTPROCESSFORMAT"
+#		# We need IN to proceed.
+#		if [ -s "$IN" ] ; then
+#			#OUT="${ABCDETEMPDIR}/track$1.$OUTPUT"
+#			run_command "" echo "Post-processing track $1 of $TRACKS..."
+#			case "$POSTPROCESSFORMAT" in
+#				mp3)
+#					run_command "postprocess-$OUTPUT-$1" nice $POSTNICE $MP3_POST $IF $OF ;;
+#				ogg)
+#					run_command "postprocess-$OUTPUT-$1" nice $POSTNICE $OGG_POST $IF $OF ;;
+#				flac)
+#					run_command "postprocess-$OUTPUT-$1" nice $POSTNICE $FLAC_POST $IF $OF ;;
+#				spx)
+#					run_command "postprocess-$OUTPUT-$1" nice $POSTNICE $SPX_POST $IF $OF ;;
+#			esac
+#			# Only remove .wav if the encoding succeeded
+#			if checkerrors "postprocess-(.{3,4})-$1"; then
+#				run_command "postprocess-$1" false
+#			else
+#				run_command "postprocess-$1" true
+#			fi
+#		else
+#			if [ "$(checkstatus encode-output)" = "loud" ]; then
+#				echo "HEH! The file we were about to post-process disappeared:"
+#				echo ">> $IN"
+#			fi
+#			run_command "postprocess-$1" false
+#		fi
+#	done
+#}
+
+# do_single_gain
+# variables used:
+# FIXME #
+do_single_gain ()
+{
+:
+}
+
+# do_batch_gain
+# variables used:
+# MP3GAIN, MP3GAINOPTS, VORBISGAIN, VORBISGAINOPTS, MPCGAIN
+# FIXME #
+do_batch_gain ()
+{
+	# The commands here don't go through run_command because they're never supposed to be silenced
+	echo "Batch analizing gain in tracks: $TRACKQUEUE"
+	(
+	cd "${ABCDETEMPDIR}"
+	BLURB=
+	TRACKFILES=
+	for UTRACKNUM in $TRACKQUEUE
+	do
+		TRACKFILES="$TRACKFILES track$UTRACKNUM.mp3"
+	done
+	# FIXME # Hard-coded batch option!
+	$NORMALIZER -b $NORMALIZEROPTS $TRACKFILES
+	RETURN=$?
+	if [ "$RETURN" != "0" ]; then
+		echo "batch-normalize: $NORMALIZER returned code $RETURN" >> "${ABCDETEMPDIR}/errors"
+	else
+		for UTRACKNUM in $TRACKQUEUE
+		do
+			echo "normalizetrack-$UTRACKNUM" >> "${ABCDETEMPDIR}/status"
+		done
+	fi
+	)
+}
+
+# do_batch_normalize
+# variables used:
+# NORMALIZER, NORMALIZEROPTS
+do_batch_normalize ()
+{
+	# The commands here don't go through run_command because they're never supposed to be silenced
+	echo "Batch normalizing tracks: $TRACKQUEUE"
+	(
+	cd "${ABCDETEMPDIR}"
+	BLURB=
+	TRACKFILES=
+	for UTRACKNUM in $TRACKQUEUE
+	do
+		TRACKFILES="$TRACKFILES track$UTRACKNUM.wav"
+	done
+	# XXX: Hard-coded batch option!
+	$NORMALIZER -b $NORMALIZEROPTS $TRACKFILES
+	RETURN=$?
+	if [ "$RETURN" != "0" ]; then
+		echo "batch-normalize: $NORMALIZER returned code $RETURN" >> "${ABCDETEMPDIR}/errors"
+	else
+		for UTRACKNUM in $TRACKQUEUE
+		do
+			echo "normalizetrack-$UTRACKNUM" >> "${ABCDETEMPDIR}/status"
+		done
+	fi
+	)
+}
+
+# do_normalize [tracknumber]
+# variables used:
+# TRACKS, TRACKNAME, NORMALIZER, NORMALIZEROPTS
+do_normalize ()
+{
+	IN="${ABCDETEMPDIR}/track$1.wav"
+	if [ -e "$IN" ] ; then
+		run_command "" echo "Normalizing track $1 of $TRACKS: $TRACKNAME..."
+		run_command "normalizetrack-$1" $NORMALIZER $NORMALIZEROPTS "$IN"
+	else
+		if [ "$(checkstatus encode-output)" = "loud" ]; then
+			echo "HEH! The file we were about to normalize disappeared:"
+			echo ">> $IN"
+		fi
+		run_command "normalizetrack-$1" false "File $IN was not found"
+	fi
+}
+
+# do_move [tracknumber]
+# Deduces the outfile from environment variables
+# Creates directory if necessary
+# variables used:
+# TRACKNUM, TRACKNAME, TRACKARTIST, DALBUM, OUTPUTFORMAT, CDGENRE, CDYEAR
+do_move ()
+{
+	for TMPOUTPUT in $(echo "$OUTPUTTYPE" | tr , \ )
+	do
+		# For now, set OUTPUT as TMPOUTPUT, and then change it once we have
+		# defined the OUTPUTFILE:
+		OUTPUT="$TMPOUTPUT"
+
+		# Create ALBUMFILE, ARTISTFILE, TRACKFILE
+		ALBUMFILE="$(mungealbumname "$DALBUM")"
+		ARTISTFILE="$(mungeartistname "$TRACKARTIST")"
+		TRACKFILE="$(mungetrackname "$TRACKNAME")"
+		GENRE="$(mungegenre "$GENRE")"
+		YEAR=${CDYEAR:-$CDYEAR}
+		# If we want to start the tracks with a given number, we need to modify
+		# the TRACKNUM value before evaluation
+		gettracknum
+		# Supported variables for OUTPUTFORMAT are GENRE, YEAR, ALBUMFILE,
+		# ARTISTFILE, TRACKFILE, and TRACKNUM.
+		if [ "$ONETRACK" = "y" ]; then
+			if [ "$VARIOUSARTISTS" = "y" ]; then
+				OUTPUTFILE="$(eval echo \""$VAONETRACKOUTPUTFORMAT"\")"
+			else
+				OUTPUTFILE="$(eval echo \""$ONETRACKOUTPUTFORMAT"\")"
+			fi
+		else
+			if [ "$VARIOUSARTISTS" = "y" ]; then
+				OUTPUTFILE="$(eval echo \""$VAOUTPUTFORMAT"\")"
+			else
+				OUTPUTFILE="$(eval echo \""$OUTPUTFORMAT"\")"
+			fi
+		fi
+		if checkerrors "tagtrack-$OUTPUT-$1"; then :; else
+			# Once we know the specific output was successful, we can change
+			# the OUTPUT to the value containing the container
+			case $TMPOUTPUT in
+				vorbis|ogg)
+					OUTPUT=$OGGOUTPUTCONTAINER
+					;;
+				opus)
+					OUTPUT=$OPUSOUTPUTCONTAINER
+					;;
+				mka)
+					OUTPUT=$MKAOUTPUTCONTAINER
+					;;
+				aiff)
+					OUTPUT=$AIFFOUTPUTCONTAINER
+					;;
+				flac)
+					OUTPUT=$FLACOUTPUTCONTAINER
+					;;
+				*)
+					OUTPUT=$TMPOUTPUT
+					;;
+			esac
+			# Check that the directory for OUTPUTFILE exists, if it doesn't, create it
+			OUTPUTFILEDIR="$(dirname "$OUTPUTDIR/$OUTPUTFILE")"
+			case $OUTPUT in
+				wav)
+					if [ "$DOCLEAN" != "y" ] && [ "$FORCE" != "y" ]; then
+						# FIXME # introduce warnings?
+						:
+					else
+						# mkdir -p shouldn't return an error if the directory already exists
+						mkdir -p "$OUTPUTFILEDIR"
+						run_command "movetrack-$1" mv "${ABCDETEMPDIR}/track$1.$OUTPUT" "$OUTPUTDIR/$OUTPUTFILE.$OUTPUT"
+						if checkstatus "movetrack-output-$OUTPUT"; then :; else
+							run_command "movetrack-output-$OUTPUT" true
+						fi
+					fi
+					;;
+				*)
+					# mkdir -p shouldn't return an error if the directory already exists
+					mkdir -p "$OUTPUTFILEDIR"
+					run_command "movetrack-$1" mv "${ABCDETEMPDIR}/track$1.$OUTPUT" "$OUTPUTDIR/$OUTPUTFILE.$OUTPUT"
+					if checkstatus "movetrack-output-$OUTPUT"; then :; else
+						run_command "movetrack-output-$OUTPUT" true
+					fi
+					;;
+			esac
+			# Lets move the cue file
+			if CUEFILE=$(checkstatus cuefile) >/dev/null ; then
+				if [ -r "${ABCDETEMPDIR}/$CUEFILE" ]; then
+					if checkstatus "movecue-$OUTPUT"; then :; else
+						# Silence the Copying output since it overlaps with encoding processes...
+						#run_command "" vecho "Copying cue file to its destination directory..."
+						if checkstatus onetrack >/dev/null ; then
+							case $OUTPUT in
+								wav)
+									if [ "$DOCLEAN" != "y" ] && [ "$FORCE" != "y" ]; then
+										# We dont have the dir, since it was not created before.
+										:
+									else
+										run_command "movecue-$OUTPUT" cp "${ABCDETEMPDIR}/$CUEFILE" "$OUTPUTDIR/$OUTPUTFILE.cue"
+									fi
+									;;
+								# NOTE: Creating a cue file with the 3-char-extension files is to comply with
+								# http://brianvictor.tripod.com/mp3cue.htm#details
+								[a-z0-9][a-z0-9][a-z0-9])
+									run_command "movecue-$OUTPUT" cp "${ABCDETEMPDIR}/$CUEFILE" "$OUTPUTDIR/$OUTPUTFILE.cue"
+									;;
+								*)
+									run_command "movecue-$OUTPUT" cp "${ABCDETEMPDIR}/$CUEFILE" "$OUTPUTDIR/$OUTPUTFILE.$OUTPUT.cue"
+									;;
+							esac
+						else
+							run_command "movecue-$OUTPUT" cp "${ABCDETEMPDIR}/$CUEFILE" "$OUTPUTFILEDIR/$CUEFILE"
+						fi
+						echo "movecue-$OUTPUT" >> "${ABCDETEMPDIR}/status"
+					fi
+				fi
+			fi
+		fi
+	done
+}
+
+# do_playlist
+# Create the playlist if wanted
+# Variables used:
+# PLAYLISTFORMAT, PLAYLISTDATAPREFIX, VAPLAYLISTFORMAT, VAPLAYLISTDATAPREFIX,
+# VARIOUSARTISTS, OUTPUTDIR
+do_playlist ()
+{
+	for TMPOUTPUT in $(echo "$OUTPUTTYPE" | tr , \ )
+	do
+		case $TMPOUTPUT in
+			vorbis|ogg)
+				OUTPUT=$OGGOUTPUTCONTAINER
+				;;
+			opus)
+				OUTPUT=$OPUSOUTPUTCONTAINER
+				;;
+			mka)
+				OUTPUT=$MKAOUTPUTCONTAINER
+				;;
+			aiff)
+				OUTPUT=$AIFFOUTPUTCONTAINER
+				;;
+			flac)
+				OUTPUT=$FLACOUTPUTCONTAINER
+				;;
+			*)
+				OUTPUT=$TMPOUTPUT
+				;;
+		esac
+		# Create a playlist file for the playlist data to go into.
+		# We used to wipe it out if it existed. Now we request permission if interactive.
+		for LASTTRACK in $TRACKQUEUE; do :; done
+		ALBUMFILE="$(mungealbumname "$DALBUM")"
+		ARTISTFILE="$(mungeartistname "$DARTIST")"
+		GENRE="$(mungegenre "$GENRE")"
+		YEAR=${CDYEAR:-$CDYEAR}
+		if [ "$VARIOUSARTISTS" = "y" ] ; then
+			PLAYLISTFILE="$(eval echo "$VAPLAYLISTFORMAT")"
+		else
+			PLAYLISTFILE="$(eval echo "$PLAYLISTFORMAT")"
+		fi
+		FINALPLAYLISTDIR="$(dirname "$OUTPUTDIR/$PLAYLISTFILE")"
+		mkdir -p "$FINALPLAYLISTDIR"
+		if [ -s "$OUTPUTDIR/$PLAYLISTFILE" ]; then
+			echo -n "Erase, Append to, or Keep the existing playlist file? [e/a/k] (e): " >&2
+			if [ "$INTERACTIVE" = "y" ]; then
+				while [ "$DONE" != "y" ]; do
+					read ERASEPLAYLIST
+					case $ERASEPLAYLIST in
+						e|E|a|A|k|K) DONE=y ;;
+						"") ERASEPLAYLIST=e ; DONE=y ;;
+						*) ;;
+					esac
+				done
+			else
+				echo e >&2
+				ERASEPLAYLIST=e
+			fi
+			# Once we erase the playlist, we use append to create the new one.
+			[ "$ERASEPLAYLIST" = "e" ] || [ "$ERASEPLAYLIST" = "E" ] && rm -f "$OUTPUTDIR/$PLAYLISTFILE" && ERASEPLAYLIST=a
+		else
+			# The playlist does not exist, so we can safelly use append to create the new list
+			ERASEPLAYLIST=a
+		fi
+		if [ "$ERASEPLAYLIST" = "a" ] || [ "$ERASEPLAYLIST" = "A" ]; then
+			touch "$OUTPUTDIR/$PLAYLISTFILE"
+			for UTRACKNUM in $TRACKQUEUE
+			do
+				# Shares some code with do_move since the filenames have to match
+				CDDBTRACKNUM=$(expr $UTRACKNUM - 1) # Unpad
+				getcddbinfo TRACKNAME
+				splitvarious
+				TRACKFILE="$(mungetrackname "$TRACKNAME")"
+				ARTISTFILE="$(mungeartistname "$TRACKARTIST")"
+				ALBUMFILE="$(mungealbumname "$DALBUM")"
+				# If we want to start the tracks with a given number, we need to modify the
+				# TRACKNUM value before evaluation
+				gettracknum
+				if [ "$VARIOUSARTISTS" = "y" ]; then
+					OUTPUTFILE="$(eval echo \""$VAOUTPUTFORMAT\"")"
+				else
+					OUTPUTFILE="$(eval echo \""$OUTPUTFORMAT\"")"
+				fi
+				if [ "$VARIOUSARTISTS" = "y" ]; then
+					if [ "$VAPLAYLISTDATAPREFIX" ] ; then
+						echo "${VAPLAYLISTDATAPREFIX}$OUTPUTFILE.$OUTPUT" >> "$OUTPUTDIR/$PLAYLISTFILE"
+					else
+						relpath "$PLAYLISTFILE", "$OUTPUTFILE.$OUTPUT" >> "$OUTPUTDIR/$PLAYLISTFILE"
+					fi
+				else
+					if [ "$PLAYLISTDATAPREFIX" ]; then
+						echo "${PLAYLISTDATAPREFIX}$OUTPUTFILE.$OUTPUT" >> "$OUTPUTDIR/$PLAYLISTFILE"
+					else
+						relpath "$PLAYLISTFILE", "$OUTPUTFILE.$OUTPUT" >> "$OUTPUTDIR/$PLAYLISTFILE"
+					fi
+				fi
+			done
+		fi
+		## this will convert the playlist to have CRLF line-endings, if specified
+		## (some hardware players insist on CRLF endings)
+		if [ "$DOSPLAYLIST" = "y" ]; then
+			awk '{sub("\r$",""); printf "%s\r\n", $0}' "$OUTPUTDIR/$PLAYLISTFILE" > "${ABCDETEMPDIR}/PLAYLISTFILE.tmp"
+			cat "${ABCDETEMPDIR}/PLAYLISTFILE.tmp" | sed 's/\//\\/' > "$OUTPUTDIR/$PLAYLISTFILE"
+		fi
+		echo "playlistcomplete" >> "${ABCDETEMPDIR}/status"
+	done
+}
+
+# abcde.cue2discid
+# This function reads a cuefile on stdin and writes an extended
+# cddb query on stdout.  Any PREGAP for track 1 is properly
+# handled, although cue files embedded in FLAC files do not
+# appear to properly store the PREGAP setting. :(
+abcde.cue2discid () {
+
+	cddb_sum () {
+		val=$1
+		ret=0
+		while [ "$val" -gt 0 ] ; do
+			ret=$(( $ret + ( $val % 10) ))
+			val=$(( $val / 10 ))
+		done
+		echo "$ret"
+	}
+
+	msf2lba () {
+		OIFS="$IFS"
+		IFS=":"
+		set -- $1
+		IFS="$OIFS"
+		local first second third
+		first=$(( $1 + 0 ))
+		second=$(( $2 + 0 ))
+		third=$(( $3 + 0 ))
+
+		echo $(( ((($first * 60) + $second) * 75) + $third ))
+	}
+
+	OFFSET=150
+	PREGAP=0
+	LEADOUT=0
+	LEADIN=88200
+	i=0
+	N=0
+
+	while read line ; do
+		set -- $line
+		case "$1" in
+		TRACK)
+			i=$(( i + 1 ))
+			;;
+		INDEX)
+			if [ "$2" -eq 1 ] ; then
+				LBA=$(msf2lba $3)
+				START=$(( $LBA + $PREGAP + $OFFSET ))
+				eval TRACK$i=$START
+				X=$(cddb_sum $(( $START / 75 )) )
+				N=$(( $N + $X ))
+			fi
+			;;
+		PREGAP)
+			PREGAP=$(msf2lba $2)
+			;;
+		REM)
+			case "$2" in
+			FLAC__lead-out)
+				LEADOUT=$(( $4 / 588 ))
+				;;
+			FLAC__lead-in)
+				LEADIN=$(( $3 / 588 ))
+				;;
+			esac
+			;;
+		esac
+
+	done
+
+	TRACKS=$i
+	LEADOUT=$(( $LEADOUT + $LEADIN ))
+
+	LENGTH=$(( $LEADOUT/75 - $TRACK1/75 ))
+	CDDBDISCID=$(( ( $N % 255 ) * 2**24 | $LENGTH * 2**8 | $TRACKS ))
+	printf %08x %i ${CDDBDISCID} $TRACKS
+
+	j=1
+	while [ $j -le $TRACKS ] ; do
+		eval echo -n "\" \$TRACK$j\""
+		j=$(( $j + 1))
+	done
+	echo  $(( $LEADOUT / 75 ))
+}
+
+# abcde.mkcue
+# abcde.mkcue [--wholedisk]
+# This creates a cuefile directly from the extended discid information
+# The --wholedisk option controls whether we're ripping data from the
+# start of track one or from the start of the disk (usually, but not
+# always the same thing!)
+#
+# Track one leadin/pregap (if any) handeling:
+# --wholedisk specified:
+#   TRACK 01 AUDIO
+#     INDEX 00 00:00:00
+#     INDEX 01 <pregap value>
+#   Remaining track index values unchanged from disc TOC
+#
+# --wholedisk not specified
+#   TRACK 01 AUDIO
+#     PREGAP <pregap value>
+#     INDEX 01 00:00:00
+#   Remaining track index values offset by <pregap value>
+#
+# Variables used:
+# CDDBTRACKINFO
+abcde.mkcue () {
+
+	echomsf () {
+		printf "$1%02i:%02i:%02i\n" $(($2/4500)) $((($2/75)%60)) $(($2%75))
+	}
+
+	local MODE DISCID TRACKS
+	local i OFFSET LBA
+	local CUEWAVFILE
+
+	if [ "$1" = "--wholedisk" ] ; then
+		MODE=INDEX
+	else
+		MODE=PREGAP
+	fi
+
+	vecho "One track is $ONETRACK"
+	TRACKFILE="$(mungetrackname "$TRACKNAME")"
+	ARTISTFILE="$(mungeartistname "$TRACKARTIST")"
+	ALBUMFILE="$(mungealbumname "$DALBUM")"
+	if [ "$ONETRACK" = "y" ]; then
+		if [ "$VARIOUSARTISTS" = "y" ]; then
+			CUEWAVFILE="$(eval echo \""$VAONETRACKOUTPUTFORMAT"\" | sed -e 's@^.*/@@').$OUTPUT"
+		else
+			CUEWAVFILE="$(eval echo \""$ONETRACKOUTPUTFORMAT"\" | sed -e 's@^.*/@@').$OUTPUT"
+		fi
+		vecho "Cue wav file is $CUEWAVFILE"
+	else
+		CUEWAVFILE="dummy.wav"
+	fi
+
+	set -- $CDDBTRACKINFO
+
+	DISCID=$1
+	TRACKS=$2
+	shift 2
+
+	echo "REM DISCID $DISCID"
+	echo FILE \""$CUEWAVFILE"\" WAVE
+
+	if [ $1 -ne 150 ] && [ $MODE = "PREGAP" ] ; then
+		OFFSET=$1
+	else
+		OFFSET=150
+	fi
+
+	i=1
+	while [ $i -le "$TRACKS" ] ; do
+		LBA=$(( $1 - $OFFSET ))
+		printf "  TRACK %02i AUDIO\n" $i
+		if [ "$i" -eq 1 ] && [ "$1" -ne 150 ] ; then
+			if [ "$MODE" = PREGAP ] ; then
+				echomsf "    PREGAP " $(($"OFFSET" - 150))
+			else
+				echo    "    INDEX 00 00:00:00"
+			fi
+		fi
+		echomsf "    INDEX 01 " "$LBA"
+		i=$(( $i + 1))
+		shift
+	done
+}
+
+# do_discid
+# This is essentially the start of things
+do_discid ()
+{
+	if [ -z "${CDDBDISCID}" ]; then
+		vecho -n "Getting CD track info... "
+		# In OSX, unmount the disc before a query
+		if [ "$OSFLAVOUR" = "OSX" ]; then
+			diskutil unmount "${CDROM#/dev/}"
+		fi
+		case "$CDROMREADERSYNTAX" in
+			flac)
+				if $METAFLAC $METAFLACOPTS --export-cuesheet-to=- "$CDROM" > /dev/null 2>&1 ; then
+					case "$CUE2DISCID" in
+						# FIXME # right now we have 2 cue2discid internal
+						# implementations: builtin and abcde.cue2discid. Test
+						# both of them and decide which one we want to use.
+						builtin)
+							#vecho "Using builtin cue2discid implementation..."
+							CUESHEET="$(metaflac $METAFLACOPTS --export-cuesheet-to=- "$CDROM")"
+
+							#TRACKS=$(echo $CUESHEET | grep -E "TRACK \+[[:digit:]]\+ \+AUDIO" |wc -l)
+							#TRACKS=0
+							OFFSETTIMES=( $(echo "$CUESHEET" | sed -n -e's/\ *INDEX 01\ \+//p' ) )
+							TRACKS=${#OFFSETTIMES[@]}
+							unset OFFSETS
+							vecho "processing offsetimes ${OFFSETTIMES[@]}"
+							for OFFSETTIME in ${OFFSETTIMES[@]}; do
+								OFFSETS="$OFFSETS $(( 10#${OFFSETTIME:0:2} * 4500 + 10#${OFFSETTIME:3:2} * 75 + 10#${OFFSETTIME:6:2} ))"
+							done
+
+							LEADOUT=$(( $(echo "$CUESHEET" | grep lead-out | get_last) * 75 / 44100 ))
+							LEADIN=$(( $(echo "$CUESHEET" | grep lead-in | get_last) * 75 / 44100 ))
+							makeids
+						;;
+						*)
+							#vecho "Using external python cue2discid implementation..."
+							CDDBTRACKINFO=$($METAFLAC $METAFLACOPTS --export-cuesheet-to=- "$CDROM" | $CUE2DISCID)
+						;;
+					esac
+				else
+					log error "the input flac file does not contain a cuesheet."
+					exit 1
+				fi
+				;;
+			cdparanoia|debug)
+				CDPARANOIAOUTPUT="$( $CDROMREADER -"$CDPARANOIACDROMBUS" "$CDROM" -Q --verbose 2>&1 )"
+				RET=$?
+				if [ ! "$RET" = "0" ];then
+					log warning "something went wrong while querying the CD... Maybe a DATA CD or the CD is not loaded?"
+				fi
+
+				TRACKS="$(echo "$CDPARANOIAOUTPUT" | grep -E '^[[:space:]]+[[:digit:]]' | tail -n 1 | get_first | tr -d "." | tr '\n' ' ')"
+				CDPARANOIAAUDIOTRACKS="$TRACKS"
+
+				LEADOUT="$(echo "$CDPARANOIAOUTPUT" | grep -Eo '^TOTAL[[:space:]]+([[:digit:]]+)' | get_last)"
+				OFFSETS="$(echo "$CDPARANOIAOUTPUT" | awk '/^ +.*\[/ {print $4}')"
+				makeids
+				;;
+			*)
+				# Calculate the cddb discid in all
+				# cases now. We'll use the cddb discid
+				# for reference in most cases for
+				# consistency. Also calculate the
+				# musicbrainz discid if we need it.
+				CDDBTRACKINFO=$($CDDISCID "$CDROM")
+				if [ "$CDDISCID_NEEDS_PAUSE"x = "y"x ]; then
+					sleep 6
+				fi
+				CDDBDISCID=$(echo "$CDDBTRACKINFO" | cut -d' ' -f1)
+				case "$CDDBMETHOD" in
+					*musicbrainz*)
+						MBTRACKINFO=$($MUSICBRAINZ --command id --device "$CDROM")
+						error=$?
+						if [ $error != 0 ]; then
+							log error "$MUSICBRAINZ failed to run; ABORT"
+							exit $error
+						fi
+						MBDISCID=$(echo "$MBTRACKINFO" | cut -d' ' -f1)
+						;;
+				esac
+		esac
+		# Make sure there's a CD in there by checking cd-discid's return code
+		if [ ! "$?" = "0" ]; then
+			if [ "$CDROMREADERSYNTAX" = "flac" ] ; then
+				log error "cuesheet information from the flac file could not be read."
+				log error "Perhaps the flac file does not contain a cuesheet?."
+				exit 1
+			else
+				log error "CD could not be read. Perhaps there's no CD in the drive?"
+				exit 1
+			fi
+		fi
+		# In OSX, remount the disc again
+		if [ "$OSFLAVOUR" = "OSX" ]; then
+			diskutil mount "${CDROM#/dev/}"
+		fi
+		WEHAVEACD=y
+		CDDBDISCID=$(echo "$CDDBTRACKINFO" | cut -f1 -d' ')
+	else
+		CDDBTRACKINFO=$(cat "$WAVOUTPUTDIR/abcde.${CDDBDISCID}/cddbdiscid")
+	fi
+
+	# Get a full enumeration of tracks, sort it, and put it in the TRACKQUEUE.
+	# This needs to be done now because a section of the resuming code will need
+	# it later.
+
+	# get the number of digits to pad TRACKNUM with - we'll use this later
+	# a CD can only hold 99 tracks, but since we support a feature for starting
+	# numbering the tracks from a given number, we might need to set it as a
+	# variable for the user to define... or obtain it somehow.
+	if [ "$PADTRACKS" = "y" ] ; then
+		TRACKNUMPADDING=2
+	fi
+
+	ABCDETEMPDIR="$WAVOUTPUTDIR/abcde.${CDDBDISCID}"
+	if [ -z "$TRACKQUEUE" ]; then
+		if [ ! "$STRIPDATATRACKS" = "n" ]; then
+			case "$CDROMREADERSYNTAX" in
+				cdparanoia|libcdio|debug)
+					if [ "$WEHAVEACD" = "y" ]; then
+						vecho "Querying the CD for audio tracks..."
+						CDPARANOIAOUTPUT="$( $CDROMREADER -"$CDPARANOIACDROMBUS" "$CDROM" -Q --verbose 2>&1 )"
+						RET=$?
+						if [ ! "$RET" = "0" ];then
+							log warning "something went wrong while querying the CD... Maybe a DATA CD?"
+						fi
+						TRACKS="$(echo "$CDPARANOIAOUTPUT" | grep -E '^[[:space:]]+[[:digit:]]' | tail -n 1 | get_first | tr -d "." | tr '\n' ' ')"
+						CDPARANOIAAUDIOTRACKS="$TRACKS"
+					else
+						# Previous versions of abcde would store the tracks on a file, instead of the status record.
+						if [ -f "${ABCDETEMPDIR}/cdparanoia-audio-tracks" ]; then
+							echo "cdparanoia-audio-tracks=$( cat "${ABCDETEMPDIR}/cdparanoia-audio-tracks" )" >> "${ABCDETEMPDIR}/status"
+							rm -f "${ABCDETEMPDIR}/cdparanoia-audio-tracks"
+						fi
+						if [ -f "${ABCDETEMPDIR}/status" ] && TRACKS=$(checkstatus cdparanoia-audio-tracks); then :; else
+							TRACKS=$(echo "$CDDBTRACKINFO" | cut -f2 -d' ')
+						fi
+					fi
+					;;
+				*)	TRACKS=$(echo "$CDDBTRACKINFO" | cut -f2 -d' ') ;;
+			esac
+		else
+			TRACKS=$(echo "$CDDBTRACKINFO" | cut -f2 -d' ')
+		fi
+		if echo "$TRACKS" | grep "[[:digit:]]" > /dev/null 2>&1 ;then :;else
+			log info "The disc does not contain any tracks. Giving up..."
+			exit 0
+		fi
+		echo -n "Grabbing entire CD - tracks: "
+		if [ ! "$PADTRACKS" = "y" ] ; then
+			TRACKNUMPADDING=$(echo -n $TRACKS | wc -c | tr -d ' ')
+		fi
+
+		TRACKS=$(printf "%0.${TRACKNUMPADDING}d" $TRACKS)
+		X=1
+		while [ $X -le $TRACKS ]
+		do
+			PT=$(printf "%0.${TRACKNUMPADDING}d" $X)
+			TRACKQUEUE="$TRACKQUEUE $PT"
+			X=$(($X + 1))
+		done
+		echo "$TRACKQUEUE"
+	else
+		TRACKS=$(echo "$CDDBTRACKINFO" | cut -f2 -d' ')
+		# User-supplied track queue.
+		# Weed out non-numbers, whitespace, then sort and weed out duplicates
+		TRACKQUEUE=$(echo "$TRACKQUEUE" | sed 's-[^0-9 ]--g' | tr ' ' '\n' | grep -v ^$ | sort -n | uniq | tr '\n' ' ' | sed 's- $--g')
+		# Once cleaned, obtain the highest value in the trackqueue for number padding
+		for LASTTRACK in $TRACKQUEUE; do :; done
+		if [ ! "$PADTRACKS" = "y" ] ; then
+			TRACKNUMPADDING=$(echo -n "$LASTTRACK" | wc -c | tr -d ' ')
+		fi
+		# Now we normalize the trackqueue
+		for TRACK in $TRACKQUEUE; do
+			PADTRACKNUM=$(printf "%0.${TRACKNUMPADDING}d" $(expr ${TRACK} + 0 ))
+			PADTRACKQUEUE="$PADTRACKQUEUE $PADTRACKNUM"
+		done
+		TRACKQUEUE="$PADTRACKQUEUE"
+		echo Grabbing tracks: "$TRACKQUEUE"
+	fi
+
+	QUEUEDTRACKS=$(echo $TRACKQUEUE | wc -w | tr -d ' ')
+
+	# We have the discid, create a temp directory after it to store all the temp
+	# info
+
+	if [ -e "${ABCDETEMPDIR}" ]; then
+		echo -n "abcde: attempting to resume from ${ABCDETEMPDIR}"
+		# It already exists, see if it's a directory
+		if [ ! -d "${ABCDETEMPDIR}" ]; then
+			# This is a file/socket/fifo/device/etc, not a directory
+			# Complain and exit
+			echo >&2
+			echo "abcde: file ${ABCDETEMPDIR} already exists and does not belong to abcde." >&2
+			echo "Please investigate, remove it, and rerun abcde." >&2
+			exit 1
+		fi
+		echo -n .
+		# It's a directory, let's see if it's writable by us
+		if [ ! -r "${ABCDETEMPDIR}" ] || [ ! -w "${ABCDETEMPDIR}" ] || [ ! -x "${ABCDETEMPDIR}" ]; then
+			# Nope, complain and exit
+			echo >&2
+			echo "abcde: directory ${ABCDETEMPDIR} already exists and is not writeable." >&2
+			echo "Please investigate, remove it, and rerun abcde." >&2
+			exit 1
+		fi
+		echo .
+		# Check to see the version of abcde that was used. If it's not
+		# the same version as we are, bail.
+		RESUME_VERSION="$(checkstatus abcde-version)"
+		if [ "$RESUME_VERSION" != "$VERSION" ]; then
+			# Nope, complain and exit
+			echo >&2
+			echo "abcde: Working directory ${ABCDETEMPDIR} was created using version $RESUME_VERSION." >&2
+			echo "abcde: Current version is $VERSION." >&2
+			echo "abcde: Refusing to resume with a version mismatch." >&2
+			echo "Please remove it, and rerun abcde." >&2
+			exit 1
+		fi
+		echo .
+		# See if it's populated
+		if [ ! -f "${ABCDETEMPDIR}/cddbdiscid" ]; then
+			# Wipe and start fresh
+			echo "abcde: ${ABCDETEMPDIR}/cddbdiscid not found. Abcde must remove and recreate" >&2
+			echo -n "this directory to continue. Continue [y/N]? " >&2
+			if [ "$INTERACTIVE" = "y" ]; then
+				read ANSWER
+			else
+				echo y >&2
+				ANSWER=y
+			fi
+			if [ "$ANSWER" != "y" ]; then
+				exit 1
+			fi
+			rm -rf "${ABCDETEMPDIR}" || exit 1
+			mkdir -p "${ABCDETEMPDIR}"
+			if [ "$?" -gt "0" ]; then
+				# Directory already exists or could not be created
+				echo "abcde: Temp directory ${ABCDETEMPDIR} could not be created." >&2
+				exit 1
+			fi
+		else
+			# Everything is fine. Check for ^encodetracklocation-
+			# and encode-output entries in the status file and
+			# remove them. These are not relevant across sessions.
+			echo "Resuming" >> "${ABCDETEMPDIR}/status"
+			if [ -f "${ABCDETEMPDIR}/status" ]; then
+				mv "${ABCDETEMPDIR}/status" "${ABCDETEMPDIR}/status.old"
+				grep -v ^encodetracklocation- < "${ABCDETEMPDIR}/status.old" \
+					| grep -v ^encode-output > "${ABCDETEMPDIR}/status"
+			fi
+			# Remove old error messages
+			if [ -f "${ABCDETEMPDIR}/errors" ]; then
+				rm -f "${ABCDETEMPDIR}/errors"
+			fi
+		fi
+	else
+		# We are starting from scratch
+		mkdir -p "${ABCDETEMPDIR}"
+		if [ "$?" -gt "0" ]; then
+			# Directory already exists or could not be created
+			echo "abcde: Temp directory ${ABCDETEMPDIR} could not be created." >&2
+			exit 1
+		fi
+		cat /dev/null > "${ABCDETEMPDIR}/status"
+		# Store the abcde version in the status file.
+		echo "abcde-version=$VERSION" >> "${ABCDETEMPDIR}/status"
+	fi
+	if [ X"$DOCUE" = "Xy" ] && [ X"$WEHAVEACD" = "Xy" ]; then
+		if checkstatus cuefile > /dev/null 2>&1 ; then :; else
+			CUEFILE=cue-$(echo "$CDDBTRACKINFO" | cut -f1 -d' ').txt
+			vecho "Creating cue file..."
+			case "$CDROMREADERSYNTAX" in
+				flac)
+					if $METAFLAC --export-cuesheet-to=- "$CDROM" > "${ABCDETEMPDIR}/$CUEFILE"; then
+						echo "cuefile=$CUEFILE" >> "${ABCDETEMPDIR}/status"
+					else
+						log warning "the input flac file does not contain a cuesheet."
+					fi
+					;;
+				*)
+					if $CUEREADER $CUEREADEROPTS > "${ABCDETEMPDIR}/$CUEFILE"; then
+						echo "cuefile=$CUEFILE" >> "${ABCDETEMPDIR}/status"
+					else
+						log warning "reading the CUE sheet is still considered experimental"
+						log warning "and there was a problem with the CD reading. abcde will continue,"
+						log warning "but consider reporting the problem to the abcde authors"
+					fi
+					;;
+			esac
+		fi
+	fi
+	# If we got the CDPARANOIA status and it is not recorded, save it now
+	if [ -n "$CDPARANOIAAUDIOTRACKS" ]; then
+		if checkstatus cdparanoia-audio-tracks > /dev/null 2>&1; then :; else
+			echo "cdparanoia-audio-tracks=$CDPARANOIAAUDIOTRACKS" >> "${ABCDETEMPDIR}/status"
+		fi
+	fi
+
+	# Create the discid files
+	echo "$CDDBTRACKINFO" > "${ABCDETEMPDIR}/cddbdiscid"
+	case "$CDDBMETHOD" in
+		*musicbrainz*)
+			echo "$MBTRACKINFO" > "${ABCDETEMPDIR}/mbdiscid"
+			;;
+	esac
+}
+
+# do_cleancue
+# Create a proper CUE file based on the CUE file we created before.
+do_cleancue()
+{
+	if CUEFILE_IN="${ABCDETEMPDIR}"/$(checkstatus cuefile); then
+		CUEFILE_OUT=$CUEFILE_IN.out
+		### FIXME ### checkstatus cddb
+		if [ -e "$CDDBDATA" ]; then
+			vecho "Adding metadata to the cue file..."
+			# FIXME It doesn't preserve spaces! Why?
+			# FIXME parse $track into PERFORMER and TITLE - abcde already has code for this?
+			n=1
+			echo "PERFORMER \"$DARTIST\"" >> "$CUEFILE_OUT"
+			echo "TITLE \"$DALBUM\"" >> "$CUEFILE_OUT"
+			# Set IFS to <newline> to prevent read from swallowing spaces and tabs
+			OIFS="$IFS"
+			IFS='
+'
+			cat "$CUEFILE_IN" | while read line
+			do
+				if echo "$line" | grep "INDEX 01" > /dev/null 2>&1 ; then
+# FIXME # Possible patch: remove the line above, uncomment the 2 lines below.
+#				echo "$line" >> "$CUEFILE_OUT"
+#				if echo "$line" | grep "^[[:space:]]*TRACK" > /dev/null 2>&1 ; then
+					eval track="\$TRACK$n"
+					n=$(( $n + 1 ))
+					echo "    TITLE \"$track\"" >> "$CUEFILE_OUT"
+				# When making a single-track rip, put the
+				# actual file name into the file declaration
+				# in the cue file so that it is usable by
+				# music players and the like
+				elif [ "$ONETRACK" = "y" ] &&
+						echo "$line" | grep '^FILE "dummy.wav" WAVE' > /dev/null 2>&1 ; then
+
+					TRACKFILE="$(mungetrackname "$TRACKNAME")"
+					ARTISTFILE="$(mungeartistname "$TRACKARTIST")"
+					ALBUMFILE="$(mungealbumname "$DALBUM")"
+
+					if [ "$VARIOUSARTISTS" = "y" ]; then
+						OUTPUTFILE="$(eval echo \""$VAONETRACKOUTPUTFORMAT"\" | sed -e 's@^.*/@@').$OUTPUT"
+					else
+						OUTPUTFILE="$(eval echo \""$ONETRACKOUTPUTFORMAT"\" | sed -e 's@^.*/@@').$OUTPUT"
+					fi
+
+					echo "FILE \"$OUTPUTFILE\" WAVE" >> "$CUEFILE_OUT"
+					continue
+				fi
+# FIXME # If the lines above are uncommented, remove the line below.
+				echo "$line" >> "$CUEFILE_OUT"
+			done
+			IFS="$OIFS"
+			mv "$CUEFILE_OUT" "$CUEFILE_IN"
+			echo "cleancuefile" >> "${ABCDETEMPDIR}/status"
+		fi
+	fi
+}
+
+# do_cddbparse
+# Parses a CDDB file and outputs the title and the track names.
+# Variables: CDDBFILE
+do_cddbparse ()
+{
+	CDDBPARSEFILE="$1"
+	# List out disc title/author and contents
+	if [ "$ONETRACK" = "y" ]; then
+		vecho "ONETRACK mode selected: displaying only the title of the CD..."
+	fi
+	echo "---- $(grep -a DTITLE "${CDDBPARSEFILE}" | cut '-d=' -f2- | tr -d \\r\\n ) ----"
+	if [ X"$SHOWCDDBYEAR" = "Xy" ]; then
+		PARSEDYEAR=$(grep -a DYEAR "${CDDBPARSEFILE}" | cut '-d=' -f2-)
+		if [ ! X"$PARSEDYEAR" = "X" ]; then
+			echo "Year: $PARSEDYEAR"
+		fi
+	fi
+	if [ X"$SHOWCDDBGENRE" = "Xy" ]; then
+		PARSEDGENRE=$(grep -a DGENRE "${CDDBPARSEFILE}" | cut '-d=' -f2-)
+		if [ ! X"$PARSEDGENRE" = "X" ]; then
+			echo "Genre: $PARSEDGENRE"
+		fi
+	fi
+	if [ ! "$ONETRACK" = "y" ]; then
+		for TRACK in $(f_seq_row 1 $TRACKS)
+		do
+			echo "$TRACK": "$(grep -a ^TTITLE$(($TRACK - 1))= "${CDDBPARSEFILE}" | cut -f2- -d= | tr -d \\r\\n)"
+		done
+	fi
+}
+
+# do_localcddb_read
+# Check for a local CDDB file, and report success
+do_localcddb_read ()
+{
+	if checkstatus cddb-readcomplete && checkstatus cddb-choice >/dev/null; then :; else
+
+		CDDBLOCALSTATUS="notfound"
+		CDDBDISCID=$(echo "$CDDBTRACKINFO" | cut -d' ' -f1)
+		USELOCALRESP="y"
+
+		if [ "$CDDBLOCALRECURSIVE" = "y" ]; then
+			CDDBLOCALRESULTS="$(find "${CDDBLOCALDIR}" -name "${CDDBDISCID}" -type f 2> /dev/null)"
+			if [ ! "${CDDBLOCALRESULTS}" = "" ]; then
+				if   (( $(echo "${CDDBLOCALRESULTS}" | wc -l) == 1 )); then
+					CDDBLOCALFILE="${CDDBLOCALRESULTS}"
+					CDDBLOCALMATCH=single
+				elif (( $(echo "${CDDBLOCALRESULTS}" | wc -l) > 1 )); then
+					CDDBLOCALMATCH=multiple
+				fi
+			else
+				CDDBLOCALMATCH=none
+			fi
+		elif [ "$CDDBLOCALMATCH" = "none" ] && [ -r "${CDDBLOCALDIR}/${CDDBDISCID}" ]; then
+			CDDBLOCALFILE="${CDDBLOCALDIR}/${CDDBDISCID}"
+			CDDBLOCALMATCH=single
+		else
+			CDDBLOCALMATCH=none
+		fi
+
+		# If the user has selected to check a local CDDB repo, we proceed with it
+		case $CDDBLOCALMATCH in
+			multiple)
+				echo "Processing multiple matching CDDB entries..." > "${ABCDETEMPDIR}/cddblocalchoices"
+				X=0
+				echo "$CDDBLOCALRESULTS" | while read RESULT ; do
+					X=$(( $X + 1 ))
+					# List out disc title/author and contents
+					CDDBLOCALREAD="${ABCDETEMPDIR}/cddblocalread.$X"
+					cat "$RESULT" > "${CDDBLOCALREAD}"
+					{
+						echo -n "#$X: "
+						do_cddbparse "${CDDBLOCALREAD}"
+						echo ""
+						##FIXME## QUICK HACK !!!!
+						if [ ! "$INTERACTIVE" = "y" ]; then break ; fi
+					} >> "${ABCDETEMPDIR}/cddblocalchoices"
+				done
+				page "${ABCDETEMPDIR}/cddblocalchoices"
+				CDDBLOCALCHOICES=$( echo "$CDDBLOCALRESULTS" | wc -l )
+				# Setting the choice to an impossible integer to avoid errors in the numeric comparisons
+				CDDBLOCALCHOICENUM=-1
+				if [ "$INTERACTIVE" = "y" ]; then
+					while [ "$CDDBLOCALCHOICENUM" -lt 0 ] || [ "$CDDBLOCALCHOICENUM" -gt "$CDDBLOCALCHOICES" ]; do
+						echo "Locally cached CDDB entries found." >&2
+						echo -n "Which one would you like to use (0 for none)? [0-$CDDBLOCALCHOICES]: " >&2
+						read CDDBLOCALCHOICE
+						[ x"$CDDBLOCALCHOICE" = "x" ] && CDDBLOCALCHOICE="1"
+						# FIXME # Introduce diff's
+						if echo $CDDBLOCALCHOICE | grep -E "[[:space:]]*[[:digit:]]+,[[:digit:]]+[[:space:]]*" > /dev/null 2>&1 ; then
+							diffentries cddblocalread "$CDDBLOCALCHOICES" "$CDDBLOCALCHOICE"
+						elif echo $CDDBLOCALCHOICE | grep -E "[[:space:]]*[[:digit:]]+[[:space:]]*" > /dev/null 2>&1 ; then
+							# Make sure we get a valid choice
+							CDDBLOCALCHOICENUM=$(echo $CDDBLOCALCHOICE | xargs printf %d 2>/dev/null)
+							if [ "$CDDBLOCALCHOICENUM" -lt 0 ] || [ "$CDDBLOCALCHOICENUM" -gt "$CDDBLOCALCHOICES" ]; then
+								echo "Invalid selection. Please choose a number between 0 and $CDDBLOCALCHOICES." >&2
+							fi
+						fi
+					done
+				else
+					CDDBLOCALCHOICENUM=1
+				fi
+				if [ ! "$CDDBLOCALCHOICENUM" = "0" ]; then
+					#echo "Using local copy of CDDB data"
+					echo "# DO NOT ERASE THIS LINE! Added by abcde to imitate cddb output" > "${ABCDETEMPDIR}/cddbread.1"
+					cat "${ABCDETEMPDIR}/cddblocalread.$CDDBLOCALCHOICENUM" >> "${ABCDETEMPDIR}/cddbread.1"
+					echo "local" > "${ABCDETEMPDIR}/datasource.1"
+					echo 999 > "${ABCDETEMPDIR}/cddbquery" # Assuming 999 isn't used by CDDB
+					echo cddb-readcomplete >> "${ABCDETEMPDIR}/status"
+					do_cddbparse "${ABCDETEMPDIR}/cddbread.1" > "${ABCDETEMPDIR}/cddbchoices"
+					echo cddb-choice=1 >> "${ABCDETEMPDIR}/status"
+					CDDBLOCALSTATUS="found"
+				else
+					#echo "Not using local copy of CDDB data"
+					CDDBLOCALSTATUS="notfound"
+				fi
+				;;
+			single)
+				# List out disc title/author and contents
+				do_cddbparse "${CDDBLOCALFILE}"
+				#if [ "$CDROMREADERSYNTAX" = "flac" ] ; then
+				#	echo -n "Embedded cuesheet entry found, use it [Y/n]? " >&2
+				#else
+					echo -n "Locally cached CDDB entry found, use it [Y/n]? " >&2
+				#fi
+				if [ "$INTERACTIVE" = "y" ]; then
+					read USELOCALRESP
+					while [ "$USELOCALRESP" != "y" ] && [ "$USELOCALRESP" != "n" ] && [ "$USELOCALRESP" != "" ] ; do
+						echo -n 'Invalid selection. Please answer "y" or "n": ' >&2
+						read USELOCALRESP
+					done
+					[ x"$USELOCALRESP" = "x" ] && USELOCALRESP="y"
+				else
+					echo "y" >&2
+				fi
+				if [ "$USELOCALRESP" = "y" ]; then
+					#echo "Using local copy of CDDB data"
+					echo "# DO NOT ERASE THIS LINE! Added by abcde to imitate cddb output" > "${ABCDETEMPDIR}/cddbread.1"
+					cat "${CDDBLOCALFILE}" >> "${ABCDETEMPDIR}/cddbread.1"
+					echo "local" > "${ABCDETEMPDIR}/datasource.1"
+					echo 999 > "${ABCDETEMPDIR}/cddbquery" # Assuming 999 isn't used by CDDB
+					echo cddb-readcomplete >> "${ABCDETEMPDIR}/status"
+					do_cddbparse "${CDDBLOCALFILE}" > "${ABCDETEMPDIR}/cddbchoices"
+					echo cddb-choice=1 >> "${ABCDETEMPDIR}/status"
+					CDDBLOCALSTATUS="single"
+				else
+					#echo "Not using local copy of CDDB data"
+					CDDBLOCALSTATUS="notfound"
+				fi
+				;;
+			none)
+				CDDBLOCALSTATUS="notfound"
+				;;
+		esac
+	fi
+}
+
+# do_cdtext_read
+# Try to read CD-Text from the drive using icedax / cdda2wav
+do_cdtext_read ()
+{
+	if new_checkexec icedax; then
+		CDTEXT_READER=icedax
+	elif new_checkexec cdda2wav; then
+		CDTEXT_READER=cdda2wav
+	else
+		# Didn't find either, bail
+		return 0
+	fi
+
+	if checkstatus cdtext-readcomplete; then
+		NUM_RESPONSES=$(checkstatus "cdtext-entries")
+		NUM_CDDB_MATCHES=$(($NUM_CDDB_MATCHES + $NUM_RESPONSES))
+		vecho "Re-using existing data from CD-Text"
+	else
+		vecho "Obtaining CD-Text results..."
+		local SOURCE_WORKDIR="${ABCDETEMPDIR}/data-cdtext"
+		mkdir -p "${SOURCE_WORKDIR}"
+
+		if [ "$OSFLAVOUR" = "OSX" ] ; then
+			# Hei, we have to unmount the device before running anything like cdda2wav/icedax in OSX
+			diskutil unmount "${CDROM#/dev/}"
+			# Also, in OSX the cdrom device for cdda2wav/icedax changes...
+			CDDA2WAVCDROM="IODVDServices"
+		elif [ "$OSFLAVOUR" = "FBSD" ] || [ "$OSFLAVOUR" = "IRIX" ]; then
+			CDDA2WAVCDROM="$CDROMID"
+		else
+			if [ "$CDROMID" = "" ]; then
+				CDDA2WAVCDROM="$CDROM"
+			else
+				CDDA2WAVCDROM="$CDROMID"
+			fi
+		fi
+
+		# Do we have CD-Text on the disc (and can the drive read it?)
+		(
+			cd "${SOURCE_WORKDIR}" && rm -f audio.* audio_*
+			# Even redirect fd 0 to our output file. It seems cdda2wav
+			# writes to stdin too these days. Bizarre, buggy
+			# behaviour! Should be harmless for icedax.
+			${CDTEXT_READER} -J -v titles -D "${CDDA2WAVCDROM}" > "${SOURCE_WORKDIR}/cd-text" 2>&1 0>&1
+		)
+		grep -a -q '^CD-Text: detected' "${SOURCE_WORKDIR}/cd-text"
+		ERRORCODE=$?
+		if [ $ERRORCODE -ne 0 ]; then
+			# No CD-Text found, bail
+			return 0
+		fi
+
+		NUM_CDDB_MATCHES=$(($NUM_CDDB_MATCHES + 1))
+		# Make an empty template
+		$CDDBTOOL template "$(cat "${ABCDETEMPDIR}/cddbdiscid")" > "${SOURCE_WORKDIR}/cddbread.${NUM_CDDB_MATCHES}"
+		echo "cddb-read-${NUM_CDDB_MATCHES}-complete" >> "${ABCDETEMPDIR}/status"
+		rm -f "${SOURCE_WORKDIR}/cddbread.${NUM_CDDB_MATCHES}"
+
+		# XXX FIXME - this is a hack and should be replaced by proper
+		# character set tracking for the CDDB data we have.
+		if [ "$CDDBPROTO" -ge 6 ]; then
+			# convert to Unicode
+			iconv -f iso-8859-1 -t utf-8 <"${SOURCE_WORKDIR}/audio.cddb" >"${SOURCE_WORKDIR}/cddbread.${NUM_CDDB_MATCHES}"
+		else
+			# copy verbatim, assuming CD-TEXT is in ISO-8859-1 format
+			# apparently icedax/cdda2wav have no support for 16-bit
+			# characters yet, either
+			cp -p "${SOURCE_WORKDIR}/audio.cddb" "${SOURCE_WORKDIR}/cddbread.${NUM_CDDB_MATCHES}"
+		fi
+
+		CDDBDISCID=$(echo "$CDDBTRACKINFO" | cut -d' ' -f1)
+		ATITLE=$(grep -a -e '^DTITLE=' "${SOURCE_WORKDIR}/cddbread.${NUM_CDDB_MATCHES}" | cut -c8- | tr -d \\r\\n)
+		echo "CD-Text" > "${SOURCE_WORKDIR}/datasource.${NUM_CDDB_MATCHES}"
+		echo "none ${CDDBDISCID} ${ATITLE}" >> "${SOURCE_WORKDIR}/cddbquery.${NUM_CDDB_MATCHES}"
+
+		(
+			cd "${SOURCE_WORKDIR}"
+			rm -f audio_* audio.*
+			for file in cddbread.* cddbquery.* datasource.*; do
+				if [ -f "$file" ]; then
+					cp "$file" "${ABCDETEMPDIR}"
+				fi
+			done
+		)
+		echo "cdtext-readcomplete" >> "${ABCDETEMPDIR}/status"
+		echo "cdtext-entries=1" >> "${ABCDETEMPDIR}/status"
+	fi
+}
+
+# do_musicbrainz_read
+# Work with the musicbrainz WS API, then transform the results here so
+# they look (very) like the results from CDDB. Maybe not the best way
+# to go, but it Works For Me (TM)
+#
+# List out all the matches individually into $SOURCE_WORKDIR/cddbread.X
+#
+do_musicbrainz_read ()
+{
+	if checkstatus musicbrainz-readcomplete; then
+		NUM_RESPONSES=$(checkstatus "musicbrainz-entries")
+		NUM_CDDB_MATCHES=$(($NUM_CDDB_MATCHES + $NUM_RESPONSES))
+		vecho "Re-using existing data from $NUM_RESPONSES Musicbrainz match(es)"
+	else
+		vecho "Obtaining Musicbrainz results..."
+		# If MB is to be used, interpret the query results and read all
+		# the available entries.
+		CDDBDISCID=$(echo "$CDDBTRACKINFO" | cut -d' ' -f1)
+		MBDISCID=$(echo "$MBTRACKINFO" | cut -d' ' -f1)
+		local SOURCE_WORKDIR="${ABCDETEMPDIR}/data-musicbrainz"
+		mkdir -p "${SOURCE_WORKDIR}"
+		${MUSICBRAINZ} --command data --discid "${MBDISCID}" --workdir "${SOURCE_WORKDIR}" --start ${NUM_CDDB_MATCHES}
+		error=$?
+		if [ $error != 0 ]; then
+			log error "$MUSICBRAINZ failed to run; ABORT"
+			exit $error
+		fi
+
+		# Check for no matches.
+		# The helper script will write disc matches out to
+		# cddbread.*. Count how many we have
+		NUM_RESPONSES=$(ls -1 "${SOURCE_WORKDIR}"/cddbread.* 2>/dev/null | wc -l)
+		if [ $NUM_RESPONSES -gt 0 ] ; then
+			# One or more exact matches
+			i=1
+			while [ $i -le $NUM_RESPONSES ]; do
+				NUM_CDDB_MATCHES=$(($NUM_CDDB_MATCHES + 1))
+				i=$(($i + 1))
+				echo cddb-read-${NUM_CDDB_MATCHES}-complete >> "${ABCDETEMPDIR}/status"
+				ATITLE=$(grep -a -e '^DTITLE=' "${SOURCE_WORKDIR}/cddbread.${NUM_CDDB_MATCHES}" | cut -c8- | tr -d \\r\\n)
+				echo "none ${CDDBDISCID} ${ATITLE}" >> "${SOURCE_WORKDIR}/cddbquery.${NUM_CDDB_MATCHES}"
+				echo "Musicbrainz" > "${SOURCE_WORKDIR}/datasource.${NUM_CDDB_MATCHES}"
+				cp -f "${SOURCE_WORKDIR}/"*."${NUM_CDDB_MATCHES}" "${ABCDETEMPDIR}"
+			done
+		fi
+		echo "musicbrainz-readcomplete" >> "${ABCDETEMPDIR}/status"
+		echo "musicbrainz-entries=$NUM_RESPONSES" >> "${ABCDETEMPDIR}/status"
+	fi
+}
+
+# do_cddb_read
+do_cddb_read ()
+{
+	local SOURCE_WORKDIR="${ABCDETEMPDIR}/data-cddb"
+	mkdir -p "${SOURCE_WORKDIR}"
+
+	###########
+	# cddbstat
+	###########
+
+	# Perform CDDB protocol version check if it hasn't already been done
+	if checkstatus cddb-statcomplete; then :; else
+		if [ "$CDDBAVAIL" = "n" ]; then
+			ERRORCODE=no_query
+			echo 503 > "${SOURCE_WORKDIR}/cddbstat"
+		else
+			rc=1
+			CDDBUSER=$(echo "$HELLOINFO" | cut -f1 -d'@')
+			CDDBHOST=$(echo "$HELLOINFO" | cut -f2- -d'@')
+			while [ $rc -eq 1 ] && [ "$CDDBPROTO" -ge 3 ]; do
+				vecho "Checking CDDB server status..."
+				$CDDBTOOL stat "$CDDBURL" "$CDDBUSER" "$CDDBHOST" "$CDDBPROTO" > "${SOURCE_WORKDIR}/cddbstat"
+				RESPONSECODE=$(head -n 1 "${SOURCE_WORKDIR}/cddbstat" | cut -f1 -d' ')
+				case "$RESPONSECODE" in
+				210)    # 210 OK, status information follows (until terminating `.')
+					rc=0
+					;;
+				501)  # 501 Illegal CDDB protocol level: <n>.
+					CDDBPROTO=$(($CDDBPROTO - 1))
+					;;
+				*)	# Try a cddb query, since freedb2.org doesn't support the stat or ver commands
+					# FreeDB TESTCD disc-id is used for query
+					$CDDBTOOL query "$CDDBURL" "$CDDBPROTO" "$CDDBUSER" "$CDDBHOST" 03015501 1 296 344 > "${SOURCE_WORKDIR}/cddbstat"
+					RESPONSECODE=$(head -n 1 "${SOURCE_WORKDIR}/cddbstat" | cut -f1 -d' ')
+					case "$RESPONSECODE" in
+						2??)	# Server responded, everything seems OK
+							rc=0
+							;;
+						*)      # unknown error
+							break
+							;;
+					esac
+					;;
+				esac
+			done
+			if [ $rc -eq 1 ]; then
+				CDDBAVAIL="n"
+			fi
+		fi
+		echo cddb-statcomplete >> "${ABCDETEMPDIR}/status"
+	fi
+
+	###########
+	# cddbquery
+	###########
+
+	CDDBDISCID=$(echo "$CDDBTRACKINFO" | cut -d' ' -f1)
+	CDDBLOCALFILE="${CDDBLOCALDIR}/${CDDBDISCID}"
+
+	# Perform CDDB query if it hasn't already been done
+	if checkstatus cddb-querycomplete; then :; else
+		if [ "$CDDBAVAIL" = "n" ]; then
+			ERRORCODE=no_query
+			echo 503 > "${SOURCE_WORKDIR}/cddbquery"
+		# The default CDDBLOCALSTATUS is "notfound"
+		# This part will be triggered if the user CDDB repo does not
+		# contain the entry, or if we are not trying to use the repo.
+		else
+			vecho "Querying the CDDB server..."
+			CDDBUSER=$(echo "$HELLOINFO" | cut -f1 -d'@')
+			CDDBHOST=$(echo "$HELLOINFO" | cut -f2- -d'@')
+			$CDDBTOOL query "$CDDBURL" "$CDDBPROTO" "$CDDBUSER" "$CDDBHOST" "$CDDBTRACKINFO" > "${SOURCE_WORKDIR}/cddbquery"
+			ERRORCODE=$?
+			case $ERRORCODE in
+				0)  # success
+				;;
+				12|13|14)
+					# no match found in database, wget/fetch error,
+					# or user requested not to use CDDB. Make up an
+					# error code (503) that abcde will recognize later
+					# and compensate by making a template
+					echo 503 > "${SOURCE_WORKDIR}/cddbquery"
+				;;
+				*) # strange and unknown error
+					echo "ERRORCODE=$ERRORCODE"
+					echo "abcde: $CDDBTOOL returned unknown error code"
+				;;
+			esac
+		fi
+		echo cddb-querycomplete >> "${ABCDETEMPDIR}/status"
+	fi
+
+	###########
+	# cddbread
+	###########
+
+	# If it's not to be used, generate a template.
+	# Then, display it (or them) and let the user choose/edit it
+	if checkstatus cddb-readcomplete; then
+		NUM_RESPONSES=$(checkstatus "cddb-entries")
+		NUM_CDDB_MATCHES=$(($NUM_CDDB_MATCHES + $NUM_RESPONSES))
+		vecho "Re-using existing data from $NUM_RESPONSES cddb match(es)"
+	else
+		RESPONSECODE=$(head -n 1 "${SOURCE_WORKDIR}/cddbquery" | cut -f1 -d' ')
+		vecho "Obtaining CDDB results..."
+		case "$RESPONSECODE" in
+		200)
+			# One exact match, retrieve it
+			# 200 [section] [discid] [artist] / [title]
+			NUM_RESPONSES=1
+			NUM_CDDB_MATCHES=$(($NUM_CDDB_MATCHES + $NUM_RESPONSES))
+			$CDDBTOOL read "$CDDBURL" "$CDDBPROTO" "$CDDBUSER" "$CDDBHOST" \
+					  $(cut -f2,3 -d' ' "${SOURCE_WORKDIR}/cddbquery") \
+					  > "${SOURCE_WORKDIR}/cddbread.${NUM_CDDB_MATCHES}"
+			cat "${SOURCE_WORKDIR}/cddbquery" | cut -f2- -d' ' > "${SOURCE_WORKDIR}/cddbquery.${NUM_CDDB_MATCHES}"
+			echo "cddb" > "${SOURCE_WORKDIR}/datasource.${NUM_CDDB_MATCHES}"
+			echo "cddb-read-${NUM_CDDB_MATCHES}-complete" >> "${ABCDETEMPDIR}/status"
+			;;
+		202|403|409|500|503)
+			# TODO: Explain these error codes a little more accurately:
+			# http://ftp.freedb.org/pub/freedb/misc/freedb_CDDB_protcoldoc.zip
+			# No match response:
+			;;
+		210|211)
+			# Multiple exact, (possibly multiple) inexact matches
+			vecho -n "Retrieving multiple matches... "
+			grep -v '^[.]$' "${SOURCE_WORKDIR}/cddbquery" | (
+				# IN A SUB-SHELL - VARIABLES MODIFIED
+				# HERE DO NOT PERSIST IN THE PARENT
+				read DISCINFO # eat top line
+				while read DISCINFO
+				do
+					NUM_CDDB_MATCHES=$(($NUM_CDDB_MATCHES + 1))
+					if checkstatus "cddb-read-${NUM_CDDB_MATCHES}-complete"; then :; else
+						$CDDBTOOL read "$CDDBURL" "$CDDBPROTO" "$CDDBUSER" "$CDDBHOST" \
+								  $(echo "$DISCINFO" | cut -f1,2 -d' ') \
+								  > "${SOURCE_WORKDIR}/cddbread.${NUM_CDDB_MATCHES}"
+						echo "$DISCINFO" > "${SOURCE_WORKDIR}/cddbquery.${NUM_CDDB_MATCHES}"
+						echo "cddb" > "${SOURCE_WORKDIR}/datasource.${NUM_CDDB_MATCHES}"
+						echo "cddb-read-${NUM_CDDB_MATCHES}-complete" >> "${ABCDETEMPDIR}/status"
+					fi
+				done )
+			# Need to re-count the entries here to be able
+			# to incrememnt $NUM_CDDB_MATCHES in the
+			# parent
+			NUM_RESPONSES=$(ls -1 "${SOURCE_WORKDIR}"/datasource.* 2>/dev/null | wc -l)
+			NUM_CDDB_MATCHES=$(($NUM_CDDB_MATCHES + $NUM_RESPONSES))
+			vecho "done."
+			;;
+		999)
+			# Using local copy.
+			NUM_RESPONSES=1
+			NUM_CDDB_MATCHES=$(($NUM_CDDB_MATCHES + $NUM_RESPONSES))
+			echo "cddb-read-${NUM_CDDB_MATCHES}-complete" >> "${ABCDETEMPDIR}/status"
+			;;
+		esac
+		(
+			cd "${SOURCE_WORKDIR}"
+			for file in cddbread.* cddbquery.* datasource.*; do
+				if [ -f "$file" ]; then
+					cp "$file" "${ABCDETEMPDIR}"
+				fi
+			done
+		)
+		echo "cddb-readcomplete" >> "${ABCDETEMPDIR}/status"
+		echo "cddb-entries=$NUM_RESPONSES" >> "${ABCDETEMPDIR}/status"
+	fi
+}
+
+# do_cddbedit
+do_cddbedit ()
+{
+	if checkstatus cddb-edit >/dev/null; then
+		CDDBDATA="${ABCDETEMPDIR}/cddbread.$(checkstatus cddb-choice)"
+		VARIOUSARTISTS="$(checkstatus variousartists)"
+		VARIOUSARTISTSTYLE="$(checkstatus variousartiststyle)"
+		return 0
+	fi
+	if [ "$INTERACTIVE" = "y" ]; then
+		# We should show the CDDB results both when we are not using the local CDDB repo
+		# or when we are using it but we could not find a proper match
+		if [ "$CDDBUSELOCAL" = "y" ] && [ "$CDDBLOCALSTATUS" = "notfound" ] || [ ! "$CDDBUSELOCAL" = "y" ]; then
+			# Display the ${ABCDETEMPDIR}/cddbchoices file created above
+			if [ -r "${ABCDETEMPDIR}/cddbchoices" ]; then
+				CHOICE=$(checkstatus cddb-choice)
+				if [ -n "$CHOICE" ] ; then
+					case $NUM_CDDB_MATCHES in
+						1) cat "${ABCDETEMPDIR}/cddbchoices" ;;
+						*)
+						ATITLE=$(grep -a ^DTITLE= "${ABCDETEMPDIR}/cddbread.$CHOICE" | cut -f2- -d= | tr -d \\r\\n)
+						SOURCE=$(cat "${ABCDETEMPDIR}/datasource.$CHOICE")
+						echo "Selected: #$CDCHOICENUM ($SOURCE) ($ATITLE)"
+						do_cddbparse "${ABCDETEMPDIR}/cddbread.$CHOICE"
+						;;
+					esac
+				else
+					page "${ABCDETEMPDIR}/cddbchoices"
+					CDDBCHOICENUM=""
+					# Setting the choice to an impossible integer to avoid errors in the numeric comparisons
+					CDCHOICENUM=-1
+					# I'll take CDDB read #3 for $400, Alex
+					while [ $CDCHOICENUM -lt 0 ] || [ $CDCHOICENUM -gt $NUM_CDDB_MATCHES ]; do
+						echo -n "Which entry would you like abcde to use (0 for none)? [0-$NUM_CDDB_MATCHES]: " >&2
+						read CDDBCHOICE
+						[ X"$CDDBCHOICE" = "X" ] && CDDBCHOICE=1
+						if echo $CDDBCHOICE | grep -E "[[:space:]]*[[:digit:]]+,[[:digit:]]+[[:space:]]*" > /dev/null 2>&1 ; then
+							if [ ! X"$DIFF" = "X" ]; then
+								PARSECHOICE1=$(echo $CDDBCHOICE | cut -d"," -f1 | xargs printf %d 2>/dev/null)
+								PARSECHOICE2=$(echo $CDDBCHOICE | cut -d"," -f2 | xargs printf %d 2>/dev/null)
+								if [ "$PARSECHOICE1" -lt 1 ] || [ "$PARSECHOICE1" -gt "$NUM_CDDB_MATCHES" ] || \
+								   [ "$PARSECHOICE2" -lt 1 ] || [ "$PARSECHOICE2" -gt "$NUM_CDDB_MATCHES" ] || \
+								   [ "$PARSECHOICE1" -eq "$PARSECHOICE2" ]; then
+									echo "Invalid diff range." >&2
+									echo "Please select two comma-separated numbers between 1 and $NUM_CDDB_MATCHES" >&2
+								else
+									# We parse the 2 choices to diff, store them in temporary files and diff them.
+									for PARSECHOICE in $(echo $CDDBCHOICE | tr , \ ); do
+										do_cddbparse "${ABCDETEMPDIR}/cddbread.$PARSECHOICE" \
+													 > "${ABCDETEMPDIR}/cddbread.parsechoice.$PARSECHOICE"
+									done
+									echo "Showing diff between choices $PARSECHOICE1 and $PARSECHOICE2..." \
+										 > "${ABCDETEMPDIR}/cddbread.diff"
+									$DIFF $DIFFOPTS "${ABCDETEMPDIR}/cddbread.parsechoice.$PARSECHOICE1" \
+										  "${ABCDETEMPDIR}/cddbread.parsechoice.$PARSECHOICE2" \
+										  >> "${ABCDETEMPDIR}/cddbread.diff"
+									page "${ABCDETEMPDIR}/cddbread.diff"
+								fi
+							else
+								echo "The diff program was not found in your path." >&2
+								echo "Please choose a number between 0 and $NUM_CDDB_MATCHES." >&2
+							fi
+						elif echo $CDDBCHOICE | grep -E "[[:space:]]*[[:digit:]]+[[:space:]]*" > /dev/null 2>&1 ; then
+							# Make sure we get a valid choice
+							CDCHOICENUM=$(echo $CDDBCHOICE | xargs printf %d 2>/dev/null)
+							if [ "$CDCHOICENUM" -lt 0 ] || [ "$CDCHOICENUM" -gt "$NUM_CDDB_MATCHES" ]; then
+								echo "Invalid selection. Please choose a number between 0 and $NUM_CDDB_MATCHES." >&2
+							fi
+						fi
+					done
+					if [ "$CDCHOICENUM" = "0" ]; then
+						vecho "Creating empty CDDB template..."
+						UNKNOWNDISK=y
+						$CDDBTOOL template $(cat "${ABCDETEMPDIR}/cddbdiscid") > "${ABCDETEMPDIR}/cddbread.0"
+						echo "template" > "${ABCDETEMPDIR}/datasource.0"
+					else
+						ATITLE=$(grep -a ^DTITLE= "${ABCDETEMPDIR}/cddbread.$CDCHOICENUM" | cut -f2- -d= | tr -d \\r\\n)
+						SOURCE=$(cat "${ABCDETEMPDIR}/datasource.$CDCHOICENUM")
+						echo "Selected: #$CDCHOICENUM ($SOURCE) ($ATITLE)" >&2
+					fi
+					do_cddbparse "${ABCDETEMPDIR}/cddbread.$CDCHOICENUM"
+					echo "cddb-choice=$CDCHOICENUM" >> "${ABCDETEMPDIR}/status"
+				fi
+			fi
+		else
+			# We need some code to show the selected option when local repository is selected and we have found a match
+			vecho "Using cached CDDB match..." >&2
+			# Display the ${ABCDETEMPDIR}/cddbchoices file created above
+			if [ -r "${ABCDETEMPDIR}/cddbchoices" ]; then
+				CHOICE=$(checkstatus cddb-choice)
+				if [ "$USELOCALRESP" = "y" ]; then :; else
+					if [ -n "$CHOICE" ] ; then
+						case $NUM_CDDB_MATCHES in
+							0)
+							UNKNOWNDISK=y
+							echo "Selected template."
+							;;
+							1) cat "${ABCDETEMPDIR}/cddbchoices" ;;
+							*)
+							echo "Selected: #$CHOICE"
+							do_cddbparse "${ABCDETEMPDIR}/cddbread.$CHOICE"
+							;;
+						esac
+					fi
+				fi
+			fi
+		fi
+	else
+		# We're noninteractive - pick the first choice.
+		# But in case we run a previous instance and selected a choice, use it.
+		if [ -r "${ABCDETEMPDIR}/cddbchoices" ]; then
+			# Show the choice if we are not using the locally stored one
+			# or when the local search failed to find a match.
+			PREVIOUSCHOICE=$(checkstatus cddb-choice)
+			if [ "$CDDBUSELOCAL" = "y" ] && [ "$CDDBLOCALSTATUS" = "notfound" ] || [ ! "$CDDBUSELOCAL" = "y" ]; then
+				#if [ "$PREVIOUSCHOICE" ]; then
+					cat "${ABCDETEMPDIR}/cddbchoices"
+				#fi
+			fi
+			if [ ! -z "$PREVIOUSCHOICE" ] ; then
+				CDCHOICENUM=$PREVIOUSCHOICE
+			else
+				CDCHOICENUM=1
+				echo "cddb-choice=$CDCHOICENUM" >> "${ABCDETEMPDIR}/status"
+			fi
+			echo "Selected: #$CDCHOICENUM ($(grep -a ^DTITLE= "${ABCDETEMPDIR}/cddbread.$CDCHOICENUM" | cut -f2- -d= | tr -d \\r\\n))" >&2
+		fi
+	fi
+
+	# sanity check
+	if checkstatus cddb-choice >/dev/null; then :; else
+		echo "abcde: internal error: cddb-choice not recorded." >&2
+		exit 1
+	fi
+	CDDBDATA="${ABCDETEMPDIR}/cddbread.$(checkstatus cddb-choice)"
+	CDDBSOURCE=$(cat "${ABCDETEMPDIR}/datasource.$(checkstatus cddb-choice)")
+	echo -n "Edit selected CDDB data " >&2
+	if [ "$INTERACTIVE" = "y" ]; then
+		if [ "$UNKNOWNDISK" = "y" ]; then
+			echo -n "[Y/n]? " >&2
+			read EDITCDDB
+			[ "$EDITCDDB" != "n" ] && EDITCDDB=y
+		else
+			echo -n "[y/N]? " >&2
+			read EDITCDDB
+		fi
+	else
+		echo "[y/N]? " >&2
+		EDITCDDB=n
+	fi
+	if [ "$EDITCDDB" = "y" ]; then
+		CDDBDATAMD5SUM=$($MD5SUM "$CDDBDATA" | cut -d " " -f 1);
+
+		# Use the debian sensible-editor wrapper to pick the editor that the
+		# user has requested via their $EDITOR environment variable
+		if [ -x "/usr/bin/sensible-editor" ]; then
+			/usr/bin/sensible-editor "$CDDBDATA"
+		elif [ -n "$EDITOR" ]; then
+			if [ -x "$(which "${EDITOR%%\ *}")" ]; then
+				# That failed, try to load the preferred editor, starting
+				# with their EDITOR variable
+				$EDITOR "$CDDBDATA"
+			fi
+		# If that fails, check for a vi
+		elif which vi >/dev/null 2>&1; then
+			vi "$CDDBDATA"
+		elif [ -x /usr/bin/vim ]; then
+			/usr/bin/vim "$CDDBDATA"
+		elif [ -x /usr/bin/vi ]; then
+			/usr/bin/vi "$CDDBDATA"
+		elif [ -x /bin/vi ]; then
+			/bin/vi "$CDDBDATA"
+		# nano should be on all (modern, i.e., sarge) debian systems
+		elif which nano >/dev/null 2>&1 ; then
+			nano "$CDDBDATA"
+		elif [ -x /usr/bin/nano ]; then
+			/usr/bin/nano "$CDDBDATA"
+		# mg should be on all OpenBSD systems
+		elif which mg >/dev/null 2>&1 ; then
+			mg "$CDDBDATA"
+		elif [ -x /usr/bin/mg ]; then
+			/usr/bin/mg "$CDDBDATA"
+		# bomb out
+		else
+			log warning "no editor available. Check your EDITOR environment variable."
+		fi
+		# delete editor backup file if it exists
+		if [ -w "$CDDBDATA~" ]; then
+			rm -f "$CDDBDATA~"
+		fi
+	fi
+
+	# Some heuristics first. Look at Disc Title, and if it starts with
+	# "Various", then we'll assume Various Artists
+	if [ "$(grep -a ^DTITLE= "$CDDBDATA" | cut -f2- -d= | grep -aEci '^(various|soundtrack|varios|sonora|ost)')" != "0" ]; then
+		echo "Looks like a Multi-Artist CD" >&2
+		VARIOUSARTISTS=y
+	else
+		echo -n "Is the CD multi-artist [y/N]? " >&2
+		if [ "$INTERACTIVE" = "y" ]; then
+			read VARIOUSARTISTS
+		else
+			echo n >&2
+			VARIOUSARTISTS=n
+		fi
+	fi
+	if [ "$VARIOUSARTISTS" = "y" ] && [ ! "$ONETRACK" = "y" ]; then
+		# Set a default
+		DEFAULTSTYLE=1
+		# Need NUMTRACKS before cddb-tool will return it:
+		NUMTRACKS=$(grep -a -E '^TTITLE[0-9]+=' "$CDDBDATA" | wc -l)
+		if [ "$(grep -ac "^TTITLE.*\/" "$CDDBDATA")" -gt "$(( $NUMTRACKS / 2 ))" ]; then
+			# More than 1/2 tracks contain a "/", so guess forward
+			DEFAULTSTYLE=1
+		elif [ "$(grep -ac "^TTITLE.*\-" "$CDDBDATA")" -gt "$(( $NUMTRACKS / 2 ))" ]; then
+			# More than 1/2 contain a "-", so guess forward-dash
+			DEFAULTSTYLE=2
+		elif [ "$(grep -ac "^TTITLE.*(.*)" "$CDDBDATA")" -gt "$(( $NUMTRACKS / 2 ))" ]; then
+			# More than 1/2 contain something in parens, so guess trailing-paren
+			DEFAULTSTYLE=6
+		fi
+
+		echo "1) Artist / Title" >&2
+		echo "2) Artist - Title" >&2
+		echo "3) Title / Artist" >&2
+		echo "4) Title - Artist" >&2
+		echo "5) Artist: Title" >&2
+		echo "6) Title (Artist)" >&2
+		echo "7) This is a single-artist CD" >&2
+		echo -n "Which style of multiple artist entries is it? [1-7] ($DEFAULTSTYLE): " >&2
+		if [ "$INTERACTIVE" = "y" ]; then
+			read VARIOUSARTISTSTYLE
+		else
+			echo $DEFAULTSTYLE >&2
+			VARIOUSARTISTSTYLE=$DEFAULTSTYLE
+		fi
+		VARIOUSARTISTSTYLE=$(echo 0$VARIOUSARTISTSTYLE | xargs printf %d)
+		# If they press Enter, then the default style (0) was chosen
+		while [ "$VARIOUSARTISTSTYLE" -lt 0 ] || [ "$VARIOUSARTISTSTYLE" -gt 7 ]; do
+			echo "Invalid selection. Please choose a number between 1 and 7."
+			echo -n "Selection [1-7]: "
+			read VARIOUSARTISTSTYLE
+			VARIOUSARTISTSTYLE=$(echo "0$VARIOUSARTISTSTYLE" | xargs printf "%d")
+		done
+		if [ "$VARIOUSARTISTSTYLE" = "0" ]; then
+			VARIOUSARTISTSTYLE="$DEFAULTSTYLE"
+		fi
+		vecho "Selected: $VARIOUSARTISTSTYLE"
+		case "$VARIOUSARTISTSTYLE" in
+		1) # Artist / Title
+			VARIOUSARTISTSTYLE=forward
+			;;
+		2) # Artist - Title
+			VARIOUSARTISTSTYLE=forward-dash
+			;;
+		3) # Title / Artist
+			VARIOUSARTISTSTYLE=reverse
+			;;
+		4) # Title - Artist
+			VARIOUSARTISTSTYLE=reverse-dash
+			;;
+		5) # Artist: Title
+			VARIOUSARTISTSTYLE=colon
+			;;
+		6) # Title (Artist)
+			VARIOUSARTISTSTYLE=trailing-paren
+			;;
+		7) # Single Artist
+			VARIOUSARTISTS=n
+			;;
+		esac
+	fi
+
+	echo "variousartists=$VARIOUSARTISTS" >> "${ABCDETEMPDIR}/status"
+	echo "variousartiststyle=$VARIOUSARTISTSTYLE" >> "${ABCDETEMPDIR}/status"
+
+	if [ "$EDITCDDB" = "y" ] && [ "$CDDBSOURCE" = "cddb" ] && [ "$UNINTENTIONALLY_ANGER_THE_FREEDB_PEOPLE" = "y" ]; then
+		if [ "$CDDBDATAMD5SUM" != "" ]  && [ "$CDDBDATAMD5SUM" != "$($MD5SUM "$CDDBDATA" | cut -d " " -f 1)" ]; then
+			# This works but does not have the necessary error checking
+			# yet. If you are familiar with the CDDB spec
+			# (see http://www.freedb.org/src/latest/DBFORMAT)
+			# and can create an error-free entry on your own, then put
+			# UNINTENTIONALLY_ANGER_THE_FREEDB_PEOPLE=y in your
+			# abcde.conf to enable it. Put CDDBSUBMIT=email@address in
+			# your abcde.conf to change the email address submissions are
+			# sent to.
+
+			# submit the modified file, if they want
+			if [ "$NOSUBMIT" != "y" ]; then
+				echo -n "Do you want to submit this entry to $CDDBSUBMIT [y/N]? "
+				read YESNO
+				while [ "$YESNO" != "y" ] && [ "$YESNO" != "n" ] && [ "$YESNO" != "Y" ] && \
+					[ "$YESNO" != "N" ] && [ "$YESNO" != "" ]
+				do
+					echo -n 'Invalid selection. Please answer "y" or "n": '
+					read YESNO
+				done
+				if [ "$YESNO" = "y" ] || [ "$YESNO" = "Y" ]; then
+					echo -n "Sending..."
+					$CDDBTOOL send "$CDDBDATA" "$CDDBSUBMIT"
+					echo "done."
+				fi
+			fi
+		fi
+	fi
+	### FIXME ###
+	# User CDDBLOCALPOLICY to find out if we store the file or not...
+	# Cache edited CDDB entry in the user's cddb dir
+	if [ "$CDDBCOPYLOCAL" = "y" ]; then
+		# Make sure the cache directory exists
+		mkdir -p "$CDDBLOCALDIR"
+		NUM_LINES=$(( $(wc -l < "$CDDBDATA") - 1 ))
+		OUTPUT_FILE="$(echo "$CDDBTRACKINFO" | cut -d' ' -f1)"
+		tail -n "$NUM_LINES" < "$CDDBDATA" > "${CDDBLOCALDIR}/${OUTPUT_FILE}"
+	fi
+
+	echo "cddb-edit" >> "${ABCDETEMPDIR}/status"
+}
+
+# do_getalbumart
+# try to download CD cover
+do_getalbumart()
+{
+	if checkstatus "get-album-art"; then :; else
+		# set variables
+		ALBUMFILE="$(mungealbumname "$DALBUM")"
+		ARTISTFILE="$(mungeartistname "$DARTIST")"
+		GENRE="$(mungegenre "$GENRE")"
+		YEAR=${CDYEAR:-$CDYEAR}
+		# have we got a musicbrainz mbid or amazon asin?
+		case "$CDDBMETHOD" in
+			*musicbrainz*)
+				# try musicbrainz mbid
+				if [ -s "${ABCDETEMPDIR}/mbid.$(checkstatus cddb-choice)" ]; then
+					MBID=$(cat "${ABCDETEMPDIR}/mbid.$(checkstatus cddb-choice)")
+					vecho "trying to get cover from coverartarchive.orq with musicbrainz mbid $MBID" >&2
+					ALBUMARTURL="http://coverartarchive.org/release/$MBID/front"
+					vecho "cover URL: $ALBUMARTURL" >&2
+					$HTTPGET "$ALBUMARTURL" > "${ABCDETEMPDIR}/$ALBUMARTFILE"
+					if [ $? -ne 0 ]; then
+						vecho "could not download cover from musicbrainz" >&2
+						# try amazon asin
+						if [ -s "${ABCDETEMPDIR}/asin.$(checkstatus cddb-choice)" ]; then
+							ASIN=$(cat "${ABCDETEMPDIR}/asin.$(checkstatus cddb-choice)")
+							vecho "trying to get cover from amazon.com with asin $ASIN" >&2
+							ALBUMARTURL="http://ec1.images-amazon.com/images/P/$ASIN.01.LZZZZZZZZ.jpg"
+							vecho "cover URL: $ALBUMARTURL" >&2
+							$HTTPGET "$ALBUMARTURL" > "${ABCDETEMPDIR}/$ALBUMARTFILE"
+							if [ $? -ne 0 ]; then
+								vecho "could not download cover from amazon" >&2
+							else
+								# Check that size is reasonable; sometimes when there is no cover image
+								# on amazon.com a 1x1 pixel gif image will be downloaded instead:
+								FILESIZE=$(wc -c < "${ABCDETEMPDIR}/$ALBUMARTFILE")
+								if [ "$FILESIZE" -lt 1024 ]; then
+									rm "${ABCDETEMPDIR}/$ALBUMARTFILE"
+									vecho "could not download cover from amazon" >&2
+								fi
+							fi
+						else
+							vecho "no amazon ID found" >&2
+						fi
+					fi
+				else
+					vecho "no musicbrainz ID found" >&2
+				fi
+				;;
+		esac
+		# use glyrc
+		if [ ! -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
+			vecho "trying to get cover with glyrc for $ARTISTFILE / $ALBUMFILE" >&2
+			env LC_ALL=C $GLYRC cover --artist "$ARTISTFILE" --album "$ALBUMFILE" --write "${ABCDETEMPDIR}/$ALBUMARTFILE" $GLYRCOPTS
+			if [ $? -ne 0 ]; then
+				vecho "could not download cover with glyrc" >&2
+			else
+				ALBUMARTURL="glyrc"
+			fi
+		fi
+		if [ "$INTERACTIVE" = "y" ]; then
+			if [ -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
+				# display properties of coverart when identify is available
+				if new_checkexec "$IDENTIFY"; then
+					$IDENTIFY $IDENTIFYOPTS "${ABCDETEMPDIR}/$ALBUMARTFILE" >&2
+				fi
+				# display coverart when DISPLAY is set and display command is available
+				if new_checkexec "$DISPLAYCMD" && [ "$DISPLAY" != "" ]; then
+					$DISPLAYCMD $DISPLAYCMDOPTS "${ABCDETEMPDIR}/$ALBUMARTFILE" >&2 &
+				fi
+			else
+				# nothing downloaded yet
+				vecho "automatic album art downloading failed" >&2
+			fi
+			# see if the user can find a better album art manually
+			if [ ! -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ] || \
+				   [ "$OVERRIDEALBUMARTDOWNLOAD" = "y" ]; then
+				echo -n "Do you want to enter URL or local path for the album art [y/N]? " >&2
+				read YESNO
+				while [ "$YESNO" != "y" ] && [ "$YESNO" != "n" ] && [ "$YESNO" != "Y" ] && \
+						  [ "$YESNO" != "N" ] && [ "$YESNO" != "" ]
+				do
+					echo -n 'Invalid selection. Please answer "y" or "n": ' >&2
+					read YESNO
+				done
+				if [ "$YESNO" = "y" ] || [ "$YESNO" = "Y" ]; then
+					echo -n "Enter URL or local path (ENTER to cancel) :" >&2
+					read ALBUMARTURL
+					if [ ! -z "$ALBUMARTURL" ]; then
+						if [[ ${ALBUMARTURL} =~ (https?|ftp|file)://.* ]]; then
+							$HTTPGET "$ALBUMARTURL" > "${ABCDETEMPDIR}/$ALBUMARTFILE"
+							if [ ! -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
+								vecho "unable to download $ALBUMARTURL" >&2
+							fi
+						else # it's a local path
+							cp "$ALBUMARTURL" "${ABCDETEMPDIR}/$ALBUMARTFILE"
+							if [ ! -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
+								vecho "unable to copy $ALBUMARTURL to ${ABCDETEMPDIR}/$ALBUMARTFILE" >&2
+							fi
+						fi
+					fi
+				fi
+			fi
+		fi
+		# convert to ALBUMARTTYPE if ImageMagick is available, if not assume correct type
+		if [ -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ] && new_checkexec "$IDENTIFY"; then
+			ALBUMARTURLTYPE=$($IDENTIFY "${ABCDETEMPDIR}/$ALBUMARTFILE" | cut -d' ' -f2)
+			if [ "$ALBUMARTURLTYPE" != "$ALBUMARTTYPE" ] || [ "$ALBUMARTALWAYSCONVERT" = "y" ]; then
+				if new_checkexec "$CONVERT"; then
+					mv "${ABCDETEMPDIR}/$ALBUMARTFILE" "${ABCDETEMPDIR}/$ALBUMARTFILE.tmp"
+					$CONVERT "${ABCDETEMPDIR}/$ALBUMARTFILE.tmp" $CONVERTOPTS "${ABCDETEMPDIR}/$ALBUMARTFILE"
+					rm -f "${ABCDETEMPDIR}/$ALBUMARTFILE.tmp"
+				else
+					rm -f "${ABCDETEMPDIR}/$ALBUMARTFILE"
+					vecho "sorry, cannot convert $ALBUMARTURLTYPE to $ALBUMARTTYPE" >&2
+					vecho "without ImageMagick convert" >&2
+				fi
+			fi
+		fi
+		# copy to target directories
+		if [ -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
+			for OUTPUT in $(echo "$OUTPUTTYPE" | tr , \ )
+			do
+				# put cover in the same place as the album
+				if [ "$ONETRACK" = "y" ] ; then
+					if [ "$VARIOUSARTISTS" = "y" ] ; then
+						ALBUMARTDIR="$(eval echo "$VAONETRACKOUTPUTFORMAT")"
+					else
+						ALBUMARTDIR="$(eval echo "$ONETRACKOUTPUTFORMAT")"
+					fi
+				else
+					if [ "$VARIOUSARTISTS" = "y" ] ; then
+						ALBUMARTDIR="$(eval echo "$VAOUTPUTFORMAT")"
+					else
+						ALBUMARTDIR="$(eval echo "$OUTPUTFORMAT")"
+					fi
+				fi
+				FINALALBUMARTDIR="$(dirname "$OUTPUTDIR/$ALBUMARTDIR")"
+				vecho "copying cover to target directory $FINALALBUMARTDIR" >&2
+				mkdir -p "$FINALALBUMARTDIR"
+				cp "${ABCDETEMPDIR}/$ALBUMARTFILE" "$FINALALBUMARTDIR"
+			done
+			rm -f "${ABCDETEMPDIR}/$ALBUMARTFILE"
+			echo "get-album-art=$ALBUMARTURL" >> "${ABCDETEMPDIR}/status"
+		else
+			log warning "could not get cover"
+			echo "get-album-art=none" >> "${ABCDETEMPDIR}/status"
+		fi
+	fi
+}
+
+# Optionally embed the albumart downloaded by the getalbumart fuction.
+# FIXME: It would be nice to have this also selectable from within the
+# FIXME: getalbumart function itself. Andrew
+do_embedalbumart()
+{
+	# Set variables:
+	ALBUMFILE="$(mungealbumname "$DALBUM")"
+	ARTISTFILE="$(mungeartistname "$DARTIST")"
+	GENRE="$(mungegenre "$GENRE")"
+	YEAR=${CDYEAR:-$CDYEAR}
+
+	# Allow for multiple output formats:
+	for OUTPUT in $(echo "$OUTPUTTYPE" | tr , \ )
+	do
+		# Find the output directory for multi track encodes:
+		if [ "$ONETRACK" != "y" ] ; then
+			if [ "$VARIOUSARTISTS" = "y" ] ; then
+				FINDPATH="$(eval echo "$VAOUTPUTFORMAT")"
+			else
+				FINDPATH="$(eval echo "$OUTPUTFORMAT")"
+			fi
+		fi
+		# Find the output directory for single track encodes:
+		if [ "$ONETRACK" = "y" ] ; then
+			if [ "$VARIOUSARTISTS" = "y" ] ; then
+				FINDPATH="$(eval echo "$VAONETRACKOUTPUTFORMAT")"
+				else
+				FINDPATH="$(eval echo "$ONETRACKOUTPUTFORMAT")"
+			fi
+		fi
+
+	FINALDIR="$(dirname "$OUTPUTDIR/$FINDPATH")"
+	cd "$FINALDIR"
+
+# Instructions for each format, feel free to add more. It would be nice to
+# make the backup directory selectable and perhaps also have an option for
+# the bold to simply have the image deleted. Work for another day... Andrew.
+	if [ -e "$ALBUMARTFILE" ] ; then
+		case  "$OUTPUT" in
+			mp3)
+				for i in *.mp3
+				do
+				"$EYED3" --add-image "$ALBUMARTFILE":FRONT_COVER "$i"
+				done
+				mkdir "$FINALDIR"/albumart_backup
+				mv "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
+				vecho "Successfully embedded the album art into your $OUTPUT tracks" >&2
+			;;
+			flac)
+				for i in *.flac
+				do 
+				"$METAFLAC" --import-picture-from="$ALBUMARTFILE" "$i"
+				done
+				mkdir "$FINALDIR"/albumart_backup
+				mv "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
+				vecho "Successfully embedded the album art into your $OUTPUT tracks" >&2
+			;;
+			m4a)
+				for i in *.m4a
+				do
+				"$ATOMICPARSLEY" "$i" --artwork "$ALBUMARTFILE" --overWrite 
+				done
+				mkdir "$FINALDIR"/albumart_backup
+				mv "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
+				vecho "Successfully embedded the album art into your $OUTPUT tracks" >&2
+				;;
+			wv)
+				for i in *.wv
+				do
+				"$WVTAG" --write-binary-tag "Cover Art (Front)=@$ALBUMARTFILE" "$i"
+				done
+				mkdir "$FINALDIR"/albumart_backup
+				mv "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
+				vecho "Successfully embedded the album art into your $OUTPUT tracks" >&2
+				;;
+			ogg)
+			# ----------------
+			# This technique is drawn from 2 sources (the first link being the primary source):
+			# 	1. https://github.com/biapy/howto.biapy.com/blob/master/various/mussync-tools
+			# 	2. https://github.com/acabal/scripts/blob/master/ogg-cover-art
+			# In abcde a few steps are used in this sequence:
+			#
+			# 	1. Create a 'legal' header for the cover art image
+			# 	2. Makes a copy of the existing tags
+			#	3. base64 the cover art image
+			#	4. Copy the original tags + the base64 image back to the original ogg file
+			#
+			# Might need some fine tuning but it is a start for abcde 2.9.         Andrew.
+			# FIXME: I am not sure if there is a maximum size for images converted in this
+			# way, but this could be perhaps handled by CONVERTOPTS called from do_getalbumart.
+			# ----------------
+			# First some variables we can reuse:
+			# Use MIMETYPECOVER to allow use of either png or the more common jpeg:
+			MIMETYPECOVER=$(file -b --mime-type "$ALBUMARTFILE")
+			EXPORTTAGS="${ABCDETEMPDIR}/export_ogg_tags"
+			BUILDHEADER="${ABCDETEMPDIR}/build_header"
+			# Now build the header, gory details are here:
+			# https://xiph.org/flac/format.html#metadata_block_picture
+				# Picture Type:
+				printf "0: %.8x" 3 | xxd -r -g0 > "$BUILDHEADER"
+				# Mime type length
+				printf "0: %.8x" $(echo -n "$MIMETYPECOVER" | wc -c) | xxd -r -g0 >> "$BUILDHEADER"
+				# Mime type:
+				echo -n "$MIMETYPECOVER" >> "$BUILDHEADER"
+				# Description length. FIXME: I have used 'Cover Image' but I am not sure
+				# if this is better left as an empty field.      Andrew
+				printf "0: %.8x" $(echo -n "Cover Image" | wc -c) | xxd -r -g0 >> "$BUILDHEADER"
+				# Description:
+				echo -n "Cover Image" >> "$BUILDHEADER"
+				# Picture width:
+				printf "0: %.8x" 0 | xxd -r -g0  >> "$BUILDHEADER"
+				# Picture height:
+				printf "0: %.8x" 0 | xxd -r -g0 >> "$BUILDHEADER"
+				# Picture color depth:
+				printf "0: %.8x" 0 | xxd -r -g0 >> "$BUILDHEADER"
+				# Picture color count:
+				printf "0: %.8x" 0 | xxd -r -g0 >> "$BUILDHEADER"
+				# Image file size:
+				printf "0: %.8x" $(wc -c "$ALBUMARTFILE" | cut --delimiter=' ' --fields=1) | xxd -r -g0 >> "$BUILDHEADER"
+				# cat the image file:
+				cat "$ALBUMARTFILE" >> "$BUILDHEADER"
+			# Now process each ogg file by first exporting the original tags then
+			# appending the cover image and finally copying the whole thing back
+			# to the original image:
+			for i in *.ogg
+			do
+				# Make a backup of the existing tags:
+				"$VORBISCOMMENT" --list --raw "$i" > "EXPORTTAGS"
+				# base64 the file and then mix it all together with the exported tags:
+				echo "metadata_block_picture=$(base64 --wrap=0 < "$BUILDHEADER")" >> "EXPORTTAGS"
+				# Update the original ogg file with exported tags and the appended base64'd image:
+				"$VORBISCOMMENT" --write --raw --commentfile "EXPORTTAGS" "$i"
+				# Delete the EXPORTTAGS file ready to be recreated for the next file in the loop,
+				# note that the header file BUILDHEADER will be reused for each file in the loop:
+				rm "EXPORTTAGS"
+			done
+			mkdir "$FINALDIR"/albumart_backup
+			mv "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
+			vecho "Successfully embedded the album art into your $OUTPUT tracks" >&2
+			;;
+			*) vecho "Sorry, abcde does not embed album art for the $OUTPUT container..." >&2
+		esac
+	else
+	vecho "Suitable cover image not found, no embedding done..." >&2
+	fi
+done
+}
+
+# do_cdread [tracknumber]
+# do_cdread onetrack [firsttrack] [lasttrack]
+#
+do_cdread ()
+{
+	# The commands here don't go through run_command because they're never supposed to be silenced
+	# return codes need to be doublechecked anyway, however
+	if [ "$1" = "onetrack" ]; then
+		# FIXME # Add the possibility of grabbing ranges of tracks in onetrack
+		# FIXME # Until then, we grab the whole CD in one track, no matter what
+		# the user said
+		# We need the first and last track for cdda2wav/icedax
+		FIRSTTRACK=$2
+		LASTTRACK=$(expr $3 + 0) # Unpad
+		UTRACKNUM=$FIRSTTRACK
+		case "$CDROMREADERSYNTAX" in
+			flac) READTRACKNUMS="-" ;;
+			cdparanoia|libcdio)
+				#XX FIXME XX
+				# Add a variable to check if tracks are provided in command line and if not, rip the whole CD
+				# We must make sure to rip from sector 0, both lines below work
+				# READTRACKNUMS="-- -$LASTTRACK" ;;
+				READTRACKNUMS="[.0]-" ;;
+			cdda2wav | icedax) READTRACKNUMS="$FIRSTTRACK+$LASTTRACK" ;;
+			pird) READTRACKNUMS="$FIRSTTRACK..$LASTTRACK" ;;
+			*) echo "abcde error: $CDROMREADERSYNTAX does not support ONETRACK mode"
+				exit 1 ;;
+		esac
+	else
+		UTRACKNUM=$1
+	fi
+	CDDBTRACKNUM=$(expr $UTRACKNUM - 1) # Unpad
+	if [ "$USEPIPES" = "y" ]; then
+		TEMPARG="PIPERIPPER_$CDROMREADERSYNTAX"
+		FILEARG="$( eval echo "\$$TEMPARG" )"
+		PIPE_MESSAGE="and encoding "
+	else
+		WAVDATA="${ABCDETEMPDIR}/track$UTRACKNUM.wav"
+		case "$CDROMREADERSYNTAX" in
+		## FIXME ## Find the cases for flac, to avoid exceptions
+			flac)
+				FILEARG="--output-name=$WAVDATA"
+				;;
+			*)
+				FILEARG="$WAVDATA"
+				;;
+		esac
+	fi
+	if [ "$1" = "onetrack" ]; then
+		echo "Grabbing ${PIPE_MESSAGE}tracks $UTRACKNUM - $LASTTRACK as one track ..." >&2
+	else
+		if [ -r "$CDDBDATA" ]; then
+			getcddbinfo TRACKNAME
+			echo "Grabbing ${PIPE_MESSAGE}track $UTRACKNUM: $TRACKNAME..." >&2
+		else
+			echo "Grabbing ${PIPE_MESSAGE}track $UTRACKNUM..." >&2
+		fi
+	fi
+	case "$CDROMREADERSYNTAX" in
+		### FIXME ### use an exception for flac, since it uses -o
+		### FIXME ### Shall we just use -o $FILEARG ??
+		flac)
+			# Avoid problems with math expressions by unpadding the given UTRACKNUM
+			STRIPTRACKNUM=$(expr $UTRACKNUM + 0 )
+			nice $READNICE $FLAC -d -f --cue="${READTRACKNUMS:-$STRIPTRACKNUM.1-$(($STRIPTRACKNUM + 1)).0}" "$FILEARG" "$CDROM" ;;
+		cdparanoia|libcdio)
+			if [ "$USEPIPES" = "y" ]; then
+				nice $READNICE $CDROMREADER -"$CDPARANOIACDROMBUS" "$CDROM" "${READTRACKNUMS:-$UTRACKNUM}" "$FILEARG"
+			else
+				nice $READNICE $CDROMREADER -"$CDPARANOIACDROMBUS" "$CDROM" "${READTRACKNUMS:-$UTRACKNUM}" "$FILEARG" >&2
+			fi
+			 ;;
+		cdda2wav|icedax)
+			if [ "$OSFLAVOUR" = "OSX" ] ; then
+				# Hei, we have to unmount the device before running anything like cdda2wav/icedax in OSX
+				diskutil unmount "${CDROM#/dev/}"
+				# Also, in OSX the cdrom device for cdda2wav/icedax changes...
+				CDDA2WAVCDROM="IODVDServices"
+			elif [ "$OSFLAVOUR" = "FBSD" ] || [ "$OSFLAVOUR" = "IRIX" ]; then
+				CDDA2WAVCDROM="$CDROMID"
+			else
+				if [ "$CDROMID" = "" ]; then
+					CDDA2WAVCDROM="$CDROM"
+				else
+					CDDA2WAVCDROM="$CDROMID"
+				fi
+			fi
+			if [ "$USEPIPES" = "y" ]; then
+				nice $READNICE $CDROMREADER -D "$CDDA2WAVCDROM" -t "${READTRACKNUMS:-$UTRACKNUM}" "$FILEARG"
+			else
+				nice $READNICE $CDROMREADER -D "$CDDA2WAVCDROM" -t "${READTRACKNUMS:-$UTRACKNUM}" "$FILEARG" >&2
+			fi
+		;;
+		dagrab)
+					# I cannot get USEPIPES to work with dagrab so just this:
+				nice $READNICE $CDROMREADER -d "$CDROM" -f "$FILEARG" -v "$UTRACKNUM" >&2
+		;;
+		pird)
+			if [ "$USEPIPES" = "y" ]; then
+				nice $READNICE $CDROMREADER -j "${READTRACKNUMS:-$UTRACKNUM}" "$CDROM" "$FILEARG"
+			else
+				# Write ripped audio data to stdout and redirect to $FILEARG.
+				# Progress is written to stderr by default and thus >&2 is not required.
+				nice $READNICE $CDROMREADER -j "${READTRACKNUMS:-$UTRACKNUM}" "$CDROM" "$PIPERIPPER_pird" > "$FILEARG"
+			fi
+		;;
+		cddafs)
+			# Find the track's mounted path
+			REALTRACKNUM=$(expr $UTRACKNUM + 0) # Unpad
+			FILEPATH=$(mount | grep "$CDROM on" | sed 's/^[^ ]* on \(.*\) (.*/\1/')
+			FILEPATH=$(find "$FILEPATH" | grep "/$REALTRACKNUM ");
+			# If the file exists, copy it
+			if [ -e "$FILEPATH" ] ; then
+				if [ "$USEPIPES" = "y" ]; then
+					nice $READNICE $CDROMREADER "$FILEPATH" "$FILEARG"
+				else
+				nice $READNICE $CDROMREADER "$FILEPATH" "$FILEARG" >&2
+			fi
+			else
+				false
+			fi ;;
+		debug)
+			if [ "$USEPIPES" = "y" ]; then
+				nice $READNICE $CDROMREADER -"$CDPARANOIACDROMBUS" "$CDROM" -w "$UTRACKNUM-[:1]" "$FILEARG"
+			else
+				nice $READNICE $CDROMREADER -"$CDPARANOIACDROMBUS" "$CDROM" -w "$UTRACKNUM-[:1]" "$FILEARG" >&2
+			fi
+		;;
+	esac
+	RETURN=$?
+	# If we get some error or we get some missing wav
+	# (as long as we dont use pipes)
+	if [ "$RETURN" != "0" ] || ( [ ! -s "$WAVDATA" ] && [ X"$USEPIPES" != "Xy" ] ); then
+		# Thank goodness errors is only machine-parseable up to the
+		# first colon, otherwise this woulda sucked
+		if [ "$RETURN" = "0" ] || [ ! -s "$WAVDATA" ]; then
+			RETURN=73 # fake a return code as cdparanoia return 0 also on aborted reads
+		fi
+		if [ "$USEPIPES" = "y" ]; then
+			echo "readencodetrack-$UTRACKNUM: $CDROMREADER returned code $RETURN" >> "${ABCDETEMPDIR}/errors"
+		else
+			echo "readtrack-$UTRACKNUM: $CDROMREADER returned code $RETURN" >> "${ABCDETEMPDIR}/errors"
+		fi
+		return $RETURN
+	else
+		if [ "$USEPIPES" = "y" ]; then
+			echo "readencodetrack-$UTRACKNUM" >> "${ABCDETEMPDIR}/status"
+		else
+			echo "readtrack-$UTRACKNUM" >> "${ABCDETEMPDIR}/status"
+		fi
+		if [ "$1" = "onetrack" ]; then
+			echo onetrack >> "${ABCDETEMPDIR}/status"
+		fi
+	fi
+}
+
+# do_cdspeed
+# No values accepted, only uses env variables
+do_cdspeed ()
+{
+	if "$CDSPEED" "$CDSPEEDOPTS" "$CDSPEEDVALUE" >/dev/null ; then
+		vecho "Setting CD speed to ${CDSPEEDVALUE}x"
+	else
+		echo "abcde: unable to set the device speed" >&2
+	fi
+}
+
+# vecho [message]
+#
+# vecho outputs a message if EXTRAVERBOSE is 1 or more
+vecho ()
+{
+if [ x"$EXTRAVERBOSE" != "x" ] && [ "$EXTRAVERBOSE" -gt 0 ] ; then
+	case $1 in
+		warning) shift ; log warning "$@" ;;
+		*) >&4 echo "$@" ;;
+	esac
+fi
+}
+
+# vvecho [message]
+#
+# vvecho outputs a message if EXTRAVERBOSE is 2 or more
+vvecho ()
+{
+if [ x"$EXTRAVERBOSE" != "x" ] && [ "$EXTRAVERBOSE" -gt 1 ] ; then
+	case $1 in
+		warning) shift ; log warning "$@" ;;
+		*) >&4 echo "$@" ;;
+	esac
+fi
+}
+
+# decho [message]
+#
+# decho outputs a debug message if DEBUG is selected
+decho ()
+{
+if [ x"$DEBUG" != "x" ]; then
+	if echo "$1" | grep "^\[" > /dev/null 2>&1 ; then
+		DEBUGECHO=$(echo "$@" | tr -d '[]')
+		echo >&4 "[DEBUG] $DEBUGECHO: $(eval echo \\$${DEBUGECHO})"
+	else
+		echo >&4 "[DEBUG] $1"
+	fi
+fi
+}
+
+# User-redefinable functions
+# Custom filename munging:
+mungefilename ()
+{
+	echo "$@" | sed -e 's/^\.*//' -e 's/ /_/g' | tr -d ":><|*/\"'?[:cntrl:]"
+}
+
+# Custom filename munging specific to track names:
+mungetrackname ()
+{
+	mungefilename "$@"
+}
+
+# Custom filename munging specific to artist names:
+mungeartistname ()
+{
+	mungefilename "$@"
+}
+
+# Custom filename munging specific to album names:
+mungealbumname ()
+{
+	mungefilename "$@"
+}
+
+# Custom genre munging:
+mungegenre ()
+{
+	echo "$CDGENRE" | tr "[:upper:]" "[:lower:]"
+}
+
+# pre_read
+# Empty pre_read function, to be defined in the configuration file.
+pre_read ()
+{
+:
+}
+
+# post_read
+# Empty post_read function, to be defined in the configuration file.
+post_read ()
+{
+:
+}
+
+# post_encode
+# Empty post_encode function, to be defined in the configuration file.
+post_encode ()
+{
+:
+}
+
+###############################################################################
+# End of functions
+#
+# Start of execution
+###############################################################################
+
+# Builtin defaults
+
+# CDDB
+# Currently three supported options ("musicbrainz", "cddb" for freedb.org and "cdtext")
+CDDBMETHOD=musicbrainz
+CDDBURL="http://freedb.freedb.org/~cddb/cddb.cgi"
+CDDBSUBMIT=freedb-submit@freedb.org
+CDDBPROTO=6
+HELLOINFO="$(whoami)@$(hostname)"
+CDDBCOPYLOCAL="n"
+CDDBLOCALPOLICY="always"
+CDDBLOCALRECURSIVE="y"
+CDDBLOCALDIR="$HOME/.cddb"
+CDDBUSELOCAL="n"
+
+# List of fields we parse and show during the CDDB parsing...
+SHOWCDDBFIELDS="year,genre"
+
+INTERACTIVE=y
+#CDROMREADERSYNTAX=cdparanoia
+ENCODERSYNTAX=default
+
+MP3ENCODERSYNTAX=default
+OGGENCODERSYNTAX=default
+OPUSENCODERSYNTAX=default
+MKAENCODERSYNTAX=default
+AIFFENCODERSYNTAX=default
+FLACENCODERSYNTAX=default
+SPEEXENCODERSYNTAX=default
+MPCENCODERSYNTAX=default
+WVENCODERSYNTAX=default
+TTAENCODERSYNTAX=default
+APENCODERSYNTAX=default
+MP2ENCODERSYNTAX=default
+AACENCODERSYNTAX=default
+NORMALIZERSYNTAX=default
+CUEREADERSYNTAX=default
+
+OUTPUTFORMAT='${ARTISTFILE}-${ALBUMFILE}/${TRACKNUM}.${TRACKFILE}'
+# Use the following VAOUTPUTFORMAT to revert to 2.0.x VA format:
+#VAOUTPUTFORMAT=${OUTPUTFORMAT}
+VAOUTPUTFORMAT='Various-${ALBUMFILE}/${TRACKNUM}.${ARTISTFILE}-${TRACKFILE}'
+ONETRACKOUTPUTFORMAT='${ARTISTFILE}-${ALBUMFILE}/${ALBUMFILE}'
+VAONETRACKOUTPUTFORMAT='Various-${ALBUMFILE}/${ALBUMFILE}'
+PLAYLISTFORMAT='${ARTISTFILE}-${ALBUMFILE}.${OUTPUT}.m3u'
+PLAYLISTDATAPREFIX=''
+VAPLAYLISTFORMAT='${ARTISTFILE}-${ALBUMFILE}.${OUTPUT}.m3u'
+VAPLAYLISTDATAPREFIX=''
+DOSPLAYLIST=n
+OVERRIDEALBUMARTDOWNLOAD=n
+COMMENT=''
+ID3TAGV=id3v2.4
+ENCNICE=10
+READNICE=10
+DISTMP3NICE=10
+VARIOUSARTISTS=n
+VARIOUSARTISTSTYLE=forward
+KEEPWAVS=n
+PADTRACKS=n
+NOGAP=n
+BATCHNORM=n
+NOCDDBQUERY=n
+
+# If using scsi devices, cdda2wav/icedax needs a CDROMID, instead of a device node
+# i.e. CDROMID="1,0,0"
+CDROMID=""
+# If we are using the IDE bus, we need CDPARANOIACDROMBUS defined as "d"
+# If we are using the ide-scsi emulation layer, we need to define a "g"
+CDPARANOIACDROMBUS="d"
+
+# program paths - defaults to checking your $PATH
+# mp3
+LAME=lame
+GOGO=gogo
+BLADEENC=bladeenc
+L3ENC=l3enc
+XINGMP3ENC=xingmp3enc
+MP3ENC=mp3enc
+# ogg
+VORBIZE=vorbize
+OGGENC=oggenc
+#opus
+OPUSENC=opusenc
+# flac
+FLAC=flac
+# speex
+SPEEXENC=speexenc
+# mpc (Musepack)
+MPCENC=mpcenc
+# wv (wavpack)
+# WVENC is retained in abcde 2.7.1 for backwards compatibility
+# with abcde 2.7:
+WVENC=wavpack
+WAVPACK=wavpack
+# True Audio: 'tta' is the newer version, 'ttaenc' is the older version:
+TTA=tta
+TTAENC=ttaenc
+# ape
+APENC=mac
+APETAG=apetag
+# mp2
+TWOLAME=twolame
+# m4a
+FAAC=faac
+NEROAACENC=neroAacEnc
+FDKAAC=fdkaac
+# Note that the qaac PATH will almost always require adjustment
+# as it is a Windows application being run through Wine. More
+# detailed notes in the sample abcde.conf file in the abcde tarball.
+QAAC=qaac
+FHGAACENC=fhgaacenc
+# The path to 'avconv' rather than 'ffmpeg'can be used here:
+FFMPEG=ffmpeg
+
+ID3=id3
+ID3V2=id3v2
+MID3V2=mid3v2
+EYED3=eyeD3
+ID3TAG=id3tag
+VORBISCOMMENT=vorbiscomment
+METAFLAC=metaflac
+NEROAACTAG=neroAacTag
+ATOMICPARSLEY=AtomicParsley
+WVTAG=wvtag
+
+WINE=wine
+CDPARANOIA=cdparanoia
+CD_PARANOIA="cd-paranoia"
+CDDA2WAV=icedax
+DAGRAB=dagrab
+CDDAFS=cp
+PIRD=pird
+CDDISCID="cd-discid"
+CDDBTOOL=cddb-tool
+MUSICBRAINZ=abcde-musicbrainz-tool
+EJECT=eject
+MD5SUM=md5sum
+DISTMP3=distmp3
+NORMALIZE="normalize-audio"
+CDSPEED=eject
+VORBISGAIN=vorbisgain
+MP3GAIN=mp3gain
+MPCGAIN=mpcgain
+WVGAIN=wvgain
+# For Wavpack replay gain we set both the default of 'track gain' 
+# as well as this option for 'album gain'. Better media players
+# such as vlc can select either or neither.              Andrew.     
+WVGAINOPTS='-a'
+MKCUE=mkcue
+MKTOC=cdrdao
+DIFF=diff
+CUE2DISCID=builtin
+GLYRC=glyrc
+IDENTIFY=identify
+CONVERT=convert
+DISPLAYCMD=display
+
+# Options for programs called from abcde:
+#
+# aiff
+# These options needed by FFmpeg for tagging and selection of id3v2 version:
+#  1. '-write_id3v2 1' allows id3v2 tagging while '-write_id3v2 0' disables tagging
+#  2. '-id3v2_version 4' gives version id3v2.4 while '3' gives id3v2.3 
+AIFFENCOPTS="-write_id3v2 1 -id3v2_version 4"
+# mp3
+LAMEOPTS=
+GOGOOPTS=
+BLADEENCOPTS=
+L3ENCOPTS=
+XINGMP3ENCOPTS=
+MP3ENCOPTS=
+MP3GAINOPTS="-a -k"
+# ogg
+VORBIZEOPTS=
+OGGENCOPTS=
+VORBISGAINOPTS="--album"
+#opus
+OPUSENCOPTS=
+# flac
+# The flac option is a workaround for an error where flac fails
+# to encode with error 'floating point exception'. This is flac 
+# error in get_console_width(), corrected in flac 1.3.1
+FLACOPTS="--silent"
+FLACGAINOPTS="--add-replay-gain"
+# speex
+SPEEXENCOPTS=
+# mpc
+MPCENCOPTS=
+# wv
+WAVPACKENCOPTS=
+# True Audio has no useful options but it is here anyway :)
+TTAENCOPTS=
+# ape
+# Monkey's Audio Console (mac) chokes without a mode setting
+# so we set one here.
+APENCOPTS='-c4000'
+# mp2
+TWOLAMENCOPTS=
+# m4a
+FAACENCOPTS=
+NEROACENCOPTS=
+# fdkaac chokes without either a bitrate or bitrate-mode specified so 
+# we set bitrate here.
+FDKAACENCOPTS='--bitrate 192k'
+QAACENCOPTS=
+FHGAACENCOPTS=
+FFMPEGENCOPTS=
+
+ID3OPTS=
+ID3TAGOPTS=
+EYED3OPTS=""
+ATOMICPARSLEYOPTS=
+CDPARANOIAOPTS=
+PIRDOPTS=
+CDDA2WAVOPTS=
+DAGRABOPTS=
+CDDAFSOPTS="-f"
+CDDBTOOLOPTS=
+EJECTOPTS=
+DISTMP3OPTS=
+NORMALIZEOPTS=
+CDSPEEDOPTS="-x"
+CDSPEEDVALUE=
+MKCUEOPTS=
+MKTOCOPTS=""
+VORBISCOMMENTOPTS="-R"
+METAFLACOPTS="--no-utf8-convert"
+DIFFOPTS=
+GLYRCOPTS=
+IDENTIFYOPTS=
+CONVERTOPTS=
+DISPLAYCMDOPTS="-resize 512x512 -title abcde_album_art"
+
+# Defaults for album art downloads
+ALBUMARTFILE="cover.jpg"
+ALBUMARTTYPE="JPEG"
+ALBUMARTALWAYSCONVERT="n"
+
+# Default to one process if -j isn't specified
+MAXPROCS=1
+
+# List of actions to perform - by default, run to completion
+ACTIONS=cddb,read,encode,tag,move,clean
+
+# This option is basically for Debian package dependencies:
+# List of preferred outputs - by default, run with whatever we have in the path
+DEFAULT_OUTPUT_BINARIES=vorbis:oggenc,flac:flac,mp3:lame,mp3:bladeenc,spx:speex,m4a:fdkaac:opus
+
+# List of preferred cdromreaders - by default, run whichever we have in the path
+DEFAULT_CDROMREADERS="cdparanoia icedax cdda2wav libcdio pird"
+
+# fd for when `vecho` and `log info` called with redirected stdout
+exec 4>&1
+
+# Assume fetch if under FreeBSD. curl is used for Mac OS X. wget is used for
+# Linux/OpenBSD. ftp is user for NetBSD.
+# Let's use these checkings to determine the OS flavour, which will be used
+# later
+UNAME="$(uname)"
+if [ X"$UNAME" = "XFreeBSD" ] ; then
+	HTTPGET=fetch
+	MD5SUM=md5
+	NEEDCDROMID=y
+	OSFLAVOUR=FBSD
+elif [ X"$UNAME" = "XDarwin" ] ; then
+	HTTPGET=curl
+	# By default md5sum is not installed, use md5 instead:
+	MD5SUM=md5
+	OSFLAVOUR=OSX
+	# We should have diskutil in OSX, but let's be sure...
+	NEEDDISKUTIL=y
+	CDROMREADERSYNTAX=cddafs
+	# We won't find the eject program in OSX, and doing checkexec will fail further below...
+	unset EJECT
+elif [ X"$UNAME" = "XOpenBSD" ] ; then
+	HTTPGET=ftp
+	MD5SUM=md5
+	OSFLAVOUR=OBSD
+elif [ X"$UNAME" = "XNetBSD" ] ; then
+	HTTPGET=ftp
+	MD5SUM=md5
+	OSFLAVOUR=NBSD
+elif [ X"$UNAME" = X"SunOS" ] ; then
+	HTTPGET=""
+	MD5SUM=md5
+	OSFLAVOUR=SunOS
+elif [ X"$UNAME" = X"IRIX64" ] ; then
+	HTTPGET="wget"
+	OSFLAVOUR=IRIX
+	NEEDCDROMID=y
+	# Apparently necessary - see
+	# https://abcde.einval.com/bugzilla/show_bug.cgi?id=29
+	CDDISCID_NEEDS_PAUSE=y
+else
+	HTTPGET=wget
+fi
+
+# If CDDBAVAIL is set to n, no CDDB read is done
+CDDBAVAIL=y
+
+# There we go..
+# But before we get into business, let us chop off any GREP environmental
+# variables.
+GREP_OPTIONS=""
+GREP_COLOR=""
+
+if [ -z "$OUTPUTDIR" ]; then
+	OUTPUTDIR=$(pwd)
+fi
+
+if [ -z "$WAVOUTPUTDIR" ]; then
+	WAVOUTPUTDIR="$OUTPUTDIR"
+fi
+
+# Load system defaults
+if [ -r /etc/abcde.conf ]; then
+	. /etc/abcde.conf
+fi
+# Load user preference defaults
+if [ -r "$HOME/.abcde.conf" ]; then
+	. "$HOME/.abcde.conf"
+fi
+
+# By this time, we need some HTTPGETOPTS already defined.
+# If the user has defined a non-default HTTPGET method, we should not be empty.
+
+if [ "$HTTPGETOPTS" = "" ] ; then
+	case $HTTPGET in
+		wget) HTTPGETOPTS="-q -nv -e timestamping=off -O -";;
+		curl) HTTPGETOPTS="-f -s -L";;
+		fetch)HTTPGETOPTS="-q -o -";;
+		ftp)  HTTPGETOPTS="-a -V -o - ";;
+		*) log warning "HTTPGET in non-standard and HTTPGETOPTS are not defined." ;;
+	esac
+fi
+
+# If the CDROM has not been set yet, find a suitable one.
+# If this is a devfs system, default to /dev/cdroms/cdrom0
+# instead of /dev/cdrom
+if [ "$CDROM" = "" ] ; then
+	if [ -e /dev/cdroms/cdrom0 ]; then
+		CDROM=/dev/cdroms/cdrom0
+	elif [ "$OSFLAVOUR" = "OSX" ] && [[ $(diskutil list) =~ CD_part[^/]*(disk.)$'\n' ]]; then
+		CDROM=/dev/${BASH_REMATCH[1]}
+	elif [ -e /dev/cdrom ]; then
+		CDROM=/dev/cdrom
+	elif [ -e /dev/sr0 ]; then
+		CDROM=/dev/sr0
+	elif [ -e /dev/cd0c ]; then
+		CDROM=/dev/cd0c
+	elif [ -e /dev/acd0c ]; then
+		CDROM=/dev/acd0c
+	elif [ -e /dev/disk1 ]; then
+		CDROM=/dev/disk1
+	fi
+fi
+
+# We used to use EXTRAVERBOSE=y to turn on more debug output. Now
+# that's changed to a number to allow for more control. Deal with
+# EXTRAVERBOSE=y/n, set it to 1/0 for backwards compatibility.
+case "$EXTRAVERBOSE" in
+	*y*|*Y*)
+		EXTRAVERBOSE=1
+		;;
+	*n*|*N*)
+		EXTRAVERBOSE=0
+		;;
+esac
+
+# Parse command line options
+while getopts 1a:bBc:C:d:DefgGhj:klLmMnNo:pPQ:r:s:S:t:T:UvVxX:w:W:z opt ; do
+	case "$opt" in
+		1) ONETRACK=y ;;
+		a) ACTIONS="$OPTARG" ;;
+		A) EXPACTIONS="$OPTARG" ;;
+		b) BATCHNORM=y ;;
+		B) GETALBUMART=y ; EMBEDALBUMART=y ;;
+		c) if [ -e "$OPTARG" ]; then
+			   . "$OPTARG"
+		   else
+			   log error "config file \"$OPTARG\" cannot be found."
+			   exit 1
+		   fi
+		   ;;
+		C) CDDBDISCID="$( echo "${OPTARG#abcde.}" | tr -d /)" ;;
+		d) CDROM="$OPTARG" ;;
+		D) set -x ;;
+		h) usage; exit ;;
+		e) ERASEENCODEDSTATUS=y ;;
+		E) ENCODING="$OPTARG" ;;
+		f) FORCE=y ;;
+		g) NOGAP=y ;;
+		G) GETALBUMART=y ;;
+		i) INLINETAG=y ;;
+		j) MAXPROCS="$OPTARG" ;;
+		k) KEEPWAVS=y ;;
+		l) LOWDISK=y ;;
+		L) CDDBUSELOCAL=y ;;
+		n) CDDBAVAIL=n ;;
+		N) INTERACTIVE=n ;;
+		m) DOSPLAYLIST=y ;;
+		M) DOCUE=y ;;
+		o) OUTPUTTYPE="$OPTARG" ;;
+		O) OVERRIDEALBUMARTDOWNLOAD=y ;;
+		p) PADTRACKS=y ;;
+		P) USEPIPES=y ;;
+		Q) CDDBMETHOD="$OPTARG" ;;
+		r) REMOTEHOSTS="$OPTARG" ;;
+		R) CDDBLOCALRECURSIVE=y ;;
+		s) SHOWCDDBFIELDS="$OPTARG" ;;
+		S) CDSPEEDVALUE="$OPTARG" ;;
+		t) STARTTRACKNUMBER="$OPTARG" ;;
+		T) STARTTRACKNUMBER="$OPTARG" ; STARTTRACKNUMBERTAG="y" ;;
+		U) CDDBPROTO=5 ;;
+		v)
+		   echo "This is abcde v$VERSION."
+		   echo "Usage: abcde [options] [tracks]"
+		   echo "abcde -h for extra help"
+		   exit
+		   ;;
+		V) EXTRAVERBOSE=$(($EXTRAVERBOSE + 1)) ;;
+		x) EJECTCD="y" ;;
+		X) CUE2DISCID="$OPTARG" ;;
+		w) COMMENT="$OPTARG" ;;
+		W) if echo "$OPTARG" | grep "[[:digit:]]" > /dev/null 2>&1 ; then
+			 STARTTRACKNUMBER="${OPTARG}$(printf "%02d" "${STARTTRACKNUMBER:-01}")"
+			 STARTTRACKNUMBERTAG="y"
+			 COMMENT="CD${OPTARG}"
+			 DISCNUMBER="${OPTARG}"
+		   else
+			 log error "argument of -W must be integer"
+			 exit 1
+		   fi
+		   ;;
+		z) DEBUG=y ; CDROMREADERSYNTAX=debug ; EJECTCD="n" ;;
+		?) usage; exit ;;
+	esac
+done
+
+shift $(($OPTIND - 1))
+
+# Here it comes the worse part of the whole thing. From here until we start
+# ripping, we have a mixture of sanity checks, verifications, default settigs
+# and other crazy stuff that interdepends, but hey, someone has to do it.
+
+# If NOCDDBQUERY is set, don't query the CDDB server.
+if [ "$NOCDDBQUERY" = "y" ]; then
+	CDDBAVAIL="n"
+fi
+
+# If the user specified a flac file, then switch to special flac mode
+if echo "$CDROM" | grep -i '.flac$' > /dev/null 2>&1 ; then
+	if [ ! -f "$CDROM" ]; then
+		log error "the defined file for FLAC ripping cannot be found" >&2
+		exit 1
+	fi
+	vecho warning "switching to flac CDROMREADERSYNTAX..."
+	CDROMREADERSYNTAX=flac
+	# We have a builtin version of cue2discid...
+	case "$CUE2DISCID" in
+		builtin);;
+		*) NEEDCUE2DISCID=y;;
+	esac
+	NEEDMETAFLAC=y
+	EJECTCD=n
+fi
+
+# If the user provided a CDDBDISCID, disable eject
+if [ -n "${CDDBDISCID}" ] || [ "$CDROMREADERSYNTAX" = "flac" ]; then EJECTCD=n ; fi
+
+# Check the available cd rippers in the system, from the ones we know.
+if [ "$CDROMREADERSYNTAX" = "" ]; then
+	for DEFAULT_CDROMREADER in $DEFAULT_CDROMREADERS; do
+		if new_checkexec "$DEFAULT_CDROMREADER"; then
+			CDROMREADERSYNTAX="$DEFAULT_CDROMREADER"
+			break
+		fi
+	done
+	if [ "$CDROMREADERSYNTAX" = "" ]; then
+		log error "no cdreader found in your PATH"
+		log error "hints: are all dependencies installed? has the \$PATH been modified?"
+		exit 1
+	fi
+fi
+
+# Decide if we can continue.
+if [ "$ONETRACK" = "y" ]; then
+	# FIXME # remove check as soon as we find out about the other readers
+	case "$CDROMREADERSYNTAX" in
+		flac) ;;
+		cdparanoia | libcdio) ;;
+		cdda2wav | icedax) ;;
+		pird) ;;
+		*) log error "$CDROMREADERSYNTAX does not support ONETRACK mode"
+			exit 1 ;;
+	esac
+	if [ "$BATCHNORM" = "y" ]; then
+		log warning "BATCHNORM mode is not compatible with ONETRACK mode. Disabling..."
+		BATCHNORM=n
+	fi
+	if [ "$NOGAP" = "y" ]; then
+		log warning "NOGAP mode is not compatible with ONETRACK mode. Disabling..."
+		NOGAP=n
+	fi
+	# It does not matter how many tracks we want. In ONETRACK mode we grab them all
+	# FIXME # allow ranges of tracks to be selected for onetrack ripping
+	if [ $# -gt 0 ]; then
+		log warning "ONETRACK mode selected, grabbing all tracks..."
+	fi
+else
+	while [ $# -gt 0 ]; do
+		# Range parsing code courtesy of Vincent Ho
+		# Cleaned up to use shell built-ins by Charles Steinkuehler
+		if [ "${1#*[^0-9-]}" != "$1" ]; then
+			log error "syntax error while processing track numbers ($1)"
+			exit 1
+		else
+			RSTART=${1%%-*}
+			REND=${1##*-}
+			while [ "${RSTART:=1}" -le "${REND:=0}" ] ; do
+				TRACKQUEUE="$TRACKQUEUE $RSTART"
+				RSTART=$(( $RSTART + 1 ))
+			done
+		fi
+		shift
+	done
+fi
+
+# List of valid actions: cddb,read,normalize,encode,tag,move,playlist,clean
+# List of experimental actions: retag,transcode
+
+# Determine what actions are to be done from $ACTIONS and set the
+# following environment variables for them:
+DOCDDB=n
+DOREAD=n
+DONORMALIZE=n
+DOPREPROCESS=n
+DOENCODE=n
+DOPOSTPROCESS=n
+DOTAG=n
+DOMOVE=n
+DOREPLAYGAIN=n
+DOPLAYLIST=n
+DOCLEAN=n
+## FIXME ## Lets keep compatibility with -M
+[ "$DOCUE" != "y" ] && DOCUE=n
+
+for ACTION in $(echo "$ACTIONS" | tr , \ )
+do
+	case $ACTION in
+		default) DOCDDB=y; DOREAD=y; DOENCODE=y; DOTAG=y; DOMOVE=y; DOCLEAN=y;;
+		cue) DOCUE=y ; MAKECUEFILE=y ;;
+		cddb) DOCDDB=y;;
+		read) DOREAD=y;;
+		normalize) DONORMALIZE=y; DOREAD=y;;
+#		preprocess) DOPREPROCESS=y; DOREAD=y;;
+		encode) DOENCODE=y; DOREAD=y;;
+#		postprocess) DOPREPROCESS=y; DOENCODE=y; DOREAD=y;;
+		tag) DOTAG=y; DOREAD=y; DOENCODE=y; DOCDDB=y;;
+		move) DOMOVE=y; DOTAG=y; DOREAD=y; DOENCODE=y; DOCDDB=y;;
+		replaygain) DOCDDB=y; DOREAD=y; DOENCODE=y; DOTAG=y; DOMOVE=y; DOREPLAYGAIN=y;;
+		playlist) DOCDDB=y; DOPLAYLIST=y;;
+		clean) DOCLEAN=y;;
+		getalbumart) GETALBUMART=y;;
+		embedalbumart) GETALBUMART=y; EMBEDALBUMART=y;;
+	esac
+done
+
+if [ "$DONORMALIZE" = "y" ] && [ "$DOREPLAYGAIN" = "y" ]; then
+	# FIXME # should we abort on error or just inform the user?
+	log warning "selected both normalize and replaygain actions"
+fi
+
+for SHOWCDDBFIELD in $(echo "$SHOWCDDBFIELDS" | tr , \ ); do
+	case $SHOWCDDBFIELD in
+		y*|Y*) SHOWCDDBYEAR="y";;
+		g*|G*) SHOWCDDBGENRE="y";;
+		*) ;;
+	esac
+done
+
+# At this point a CDROM has to be defined, so we check it exists.
+if [ X"$CDROM" != "X" ] ; then
+	if [ "$NEEDCDROMID" = "y" ] ; then
+		if [ "$CDROMREADERSYNTAX" = "cdda2wav" ] || [ "$CDROMREADERSYNTAX" = "icedax" ]; then
+			if [ "$OSFLAVOUR" = "IRIX" ]; then
+				if [ -z "$CDROMID" ]; then
+					CDROMID="$(echo "$CDROM" | sed -e 's;/dev/scsi/sc\([0-9]*\)d\([0-9]*\)l\([0-9]*\)$;\1,\2,\3;')"
+				fi
+			fi
+			if ! echo "$CDROMID" | grep "^[0-9],[0-9],[0-9]$" >/dev/null 2>&1 ; then
+				log error "CDROMID not in the right format for $CDROMREADERSYNTAX"
+				log error "Use \"cdrecord -scanbus\" to obtain an adequate ID and set CDROMID accordingly"
+				exit 1
+			fi
+		fi
+	elif [ ! -e "$CDROM" ] && [ X"$DOREAD" = "Xy" ]; then
+		log error "CDROM device cannot be found."
+		exit 1
+	fi
+# avoid processing if we are not going to hit the CDROM.
+elif [ X"$DOREAD" = "Xy" ]; then
+	log error "CDROM has not been defined or cannot be found"
+	exit 1
+fi
+
+# USEPIPES pre-tests, before we get into more serious stuff
+# Not compatible with:
+# - multiple outputs
+# - normalize
+# - lowdisk algorithm
+# - anything else?
+if [ X"$USEPIPES" = "Xy" ]; then
+	NUM_OUTPUT_TYPES="$(echo "$OUTPUTTYPE" | tr , \  | wc -w )"
+	if [ "$NUM_OUTPUT_TYPES" -gt 1 ]; then
+		log error "Unix pipes not compatible with multiple outputs"
+		exit 1
+	fi
+	if [ X"$DONORMALIZE" = "Xy" ]; then
+		log error "Unix pipes not compatible with normalizer"
+		# FIXME # Do we need to exit or shall we just disable the mode?
+		exit 1
+	fi
+	if [ X"$BATCHNORM" = "Xy" ]; then
+		log error "Unix pipes not compatible with BATCHNORM encoding"
+		exit 1
+	fi
+	if [ X"$NOGAP" = "Xy" ]; then
+		log error "Unix pipes not compatible with NOGAP encoding"
+		exit 1
+	fi
+	if [ X"$DOENCODE" = "Xn" ]; then
+		vecho warning "Disabling Unix pipes since we are not encoding!"
+		USEPIPES=n
+	fi
+	if [ X"$LOWDISK" = "Xy" ]; then
+		log error "Unix pipes not compatible with lowdisk algorithm"
+		exit 1
+	fi
+fi
+
+# LOWDISK pre-tests, before we get into more problematic stuff
+# Not compatible with anything that needs all the files in the hard disc:
+# - BATCHNORM
+# - NOGAP lame mode
+if [ X"$LOWDISK" = "Xy" ]; then
+	if [ X"$BATCHNORM" = "Xy" ]; then
+		log error "Unix pipes not compatible with BATCHNORM encoding"
+		exit 1
+	fi
+	if [ X"$NOGAP" = "Xy" ]; then
+		log error "Unix pipes not compatible with NOGAP encoding"
+		exit 1
+	fi
+fi
+
+# BATCHNORM pre-tests, before we get into serious problems
+# Not compatible with
+if [ "$BATCHNORM" = "y" ] && [ "$DONORMALIZE" = "n" ]; then
+	vecho warning "Disabling BATCHNORM since we are not normalizing!"
+	BATCHNORM=n
+fi
+
+# Check the encoding format from the ones available in the system, if nothing has been configured.
+if [ X"$OUTPUTTYPE" = "X" ]; then
+	for DEFAULT_OUTPUT in $( echo "$DEFAULT_OUTPUT_BINARIES" | tr , \ ); do
+		DEFAULT_OUTPUT_FORMAT="$(echo "$DEFAULT_OUTPUT" | cut -d ":" -f 1)"
+		DEFAULT_OUTPUT_BINARY="$(echo "$DEFAULT_OUTPUT" | cut -d ":" -f 2)"
+		if [ -x "$(which "$DEFAULT_OUTPUT_BINARY")" ] ; then
+			OUTPUTTYPE=$DEFAULT_OUTPUT_FORMAT
+			vecho "No default output type defined. Autoselecting $OUTPUTTYPE..." >&2
+			break
+		fi
+	done
+	if [ X"$OUTPUTTYPE" = "X" ]; then
+		log error "no encoder found in the PATH"
+		log error "hints: are all dependencies installed? has the \$PATH been modified?"
+		exit 1
+	fi
+fi
+
+# Decide which CDROM reader we're gonna use
+case "$CDROMREADERSYNTAX" in
+	cdparanoia|debug)
+		CDROMREADER="$CDPARANOIA"
+		CDROMREADEROPTS="$CDPARANOIAOPTS"
+		;;
+	libcdio)
+		# GNU's libcdio package will use cd-paranoia but I believe will be happy with
+		# the standard cdparanoia options. If I am wrong this will need to be fixed :).
+		CDROMREADER="$CD_PARANOIA"
+		CDROMREADEROPTS="$CDPARANOIAOPTS"
+		;;
+	cdda2wav | icedax)
+		CDROMREADER="$CDDA2WAV"
+		CDROMREADEROPTS="$CDDA2WAVOPTS"
+		;;
+	dagrab)
+		CDROMREADER="$DAGRAB"
+		CDROMREADEROPTS="$DAGRABOPTS"
+		;;
+	pird)
+		CDROMREADER="$PIRD"
+		CDROMREADEROPTS="$PIRDOPTS"
+		;;
+	cddafs)
+		CDROMREADER="$CDDAFS"
+		CDROMREADEROPTS="$CDDAFSOPTS"
+		;;
+	flac)
+		CDROMREADER="$FLAC"
+		CDROMREADEROPTS="$FLACOPTS"
+		;;
+esac
+
+# There's only one normalize...
+case "$NORMALIZERSYNTAX" in
+	default|normalize)
+		NORMALIZER="$NORMALIZE"
+		NORMALIZEROPTS="$NORMALIZEOPTS"
+		;;
+esac
+
+# Allow -o OUTPUT(1):OPTIONS(1),...,OUTPUT(N):OPTIONS(N) mode of operation
+case "$OUTPUTTYPE" in *:*)
+	for OUTPUT in $(echo "$OUTPUTTYPE" | tr \  \|| tr , \ ); do
+		OUTPUT="$(echo "$OUTPUT" | tr \| \ )"
+		case "$OUTPUT" in
+			vorbis:*|ogg:*)	OGGENCODEROPTSCLI="$( echo $OUTPUT | cut -d: -f2- )" ;;
+			opus:*)	OPUSENCODEROPTSCLI="$( echo $OUTPUT | cut -d: -f2- )" ;;
+			mka:*)	MKAENCODEROPTSCLI="$( echo $OUTPUT | cut -d: -f2- )" ;;
+			aiff:*)	AIFFENCODEROPTSCLI="$( echo $OUTPUT | cut -d: -f2- )" ;;
+			mp3:*)	MP3ENCODEROPTSCLI="$( echo $OUTPUT | cut -d: -f2- )" ;;
+			flac:*)	FLACENCODEROPTSCLI="$( echo $OUTPUT | cut -d: -f2- )" ;;
+			spx:*)	SPEEXENCODEROPTSCLI="$( echo $OUTPUT | cut -d: -f2- )" ;;
+			mpc:*)	MPCENCODEROPTSCLI="$( echo $OUTPUT | cut -d: -f2- )" ;;
+			wv:*)	WVENCODEROPTSCLI="$( echo $OUTPUT | cut -d: -f2- )" ;;
+			tta:*)	TTAENCODEROPTSCLI="$( echo $OUTPUT | cut -d: -f2- )" ;;
+			ape:*)	APENCODEROPTSCLI="$( echo $OUTPUT | cut -d: -f2- )" ;;
+			mp2:*)	MP2ENCODEROPTSCLI="$( echo $OUTPUT | cut -d: -f2- )" ;;
+			m4a:*|aac:*)  AACENCODEROPTSCLI="$( echo $OUTPUT | cut -d: -f2- )" ;;
+		esac
+	done
+	# Allows commandline selection of options while using multiple outputs.
+	# Example: abcde -o 'flac:-8,mp3:-b 320'       Patch by Matthias Andree.           
+	for OUTPUT in $(echo "$OUTPUTTYPE" | tr -d ' 	' | tr , ' '); do
+		TEMPOUTPUT=${OUTPUT%%:*}
+		TEMPOUTPUTTYPE="${TEMPOUTPUTTYPE:+$TEMPOUTPUTTYPE,}$TEMPOUTPUT"
+	done
+	OUTPUTTYPE="$TEMPOUTPUTTYPE"
+	;;
+esac
+
+# If nothing has been specified, use oggenc for oggs and lame for mp3s and flac
+# for flacs and speexenc for speex and mpcenc for mpcs and fdkaac for m4as and
+# wavpack for wvs...
+
+# Getting ready for multiple output changes
+for OUTPUT in $(echo "$OUTPUTTYPE" | tr , \ )
+do
+	case $OUTPUT in
+		vorbis|ogg)
+			[ "$OGGENCODERSYNTAX" = "default" ] && OGGENCODERSYNTAX=oggenc
+			[ "$DOTAG" = "y" ] && NEEDCOMMENTER=y
+			[ "$DOREPLAYGAIN" = "y" ] && NEEDVORBISGAIN=y
+			OGGOUTPUTCONTAINER=ogg
+			;;
+		opus)
+			[ "$OPUSENCODERSYNTAX" = "default" ] && OPUSENCODERSYNTAX=opusenc
+			OPUSOUTPUTCONTAINER=opus
+			;;
+		mka)
+			[ "$MKAENCODERSYNTAX" = "default" ] && MKAENCODERSYNTAX=ffmpeg
+			MKAOUTPUTCONTAINER=mka
+			;;
+		aiff)
+			[ "$AIFFENCODERSYNTAX" = "default" ] && AIFFENCODERSYNTAX=ffmpeg
+			AIFFOUTPUTCONTAINER=aiff
+			;;
+		mp3)
+			[ "$MP3ENCODERSYNTAX" = "default" ] && MP3ENCODERSYNTAX=lame
+			[ "$DOTAG" = "y" ] && NEEDTAGGER=y
+			[ "$DOREPLAYGAIN" = "y" ] && NEEDMP3GAIN=y
+			[ "$EMBEDALBUMART" = "y" ] && NEEDEYED3=y
+			;;
+		flac)
+			[ "$FLACENCODERSYNTAX" = "default" ] && FLACENCODERSYNTAX=flac
+			[ "$DOTAG" = "y" ] && NEEDMETAFLAC=y
+			[ "$DOREPLAYGAIN" = "y" ] && NEEDMETAFLAC=y
+			[ "$ONETRACK" = "y" ] && [ "$DOCUE" = "y" ] && NEEDMETAFLAC=y
+			[ "$EMBEDALBUMART" = "y" ] && NEEDMETAFLAC=y
+			;;
+		spx)
+			[ "$SPEEXENCODERSYNTAX" = "default" ] && SPEEXENCODERSYNTAX=speexenc
+#			[ "$DOREPLAYGAIN" = "y" ] &&
+			;;
+		mpc)
+			[ "$MPCENCODERSYNTAX" = "default" ] && MPCENCODERSYNTAX=mpcenc
+			[ "$DOREPLAYGAIN" = "y" ] && NEEDMPCGAIN=y
+			;;
+		wv)
+			[ "$WVENCODERSYNTAX" = "default" ] && WVENCODERSYNTAX=wavpack
+			[ "$DOTAG" = "y" ]
+			[ "$DOREPLAYGAIN" = "y" ] && NEEDWVGAIN=y
+			[ "$WVENCODERSYNTAX" = "ffmpeg" ] && DOREPLAYGAIN=n
+			[ "$EMBEDALBUMART" = "y" ] && NEEDWVTAG=y
+			;;
+		ape)
+			[ "$APENCODERSYNTAX" = "default" ] && APENCODERSYNTAX=mac
+			[ "$DOTAG" = "y" ] && NEEDAPETAG=y
+			;;
+		mp2)
+			[ "$MP2ENCODERSYNTAX" = "default" ] && MP2ENCODERSYNTAX=twolame
+			[ "$DOTAG" = "y" ] && NEEDMID3V2=y
+			[ "$MP2ENCODERSYNTAX" = "ffmpeg" ] && [ "$DOTAG" = "y" ]  && NEEDMID3V2=y
+			;;
+		tta)
+			[ "$TTAENCODERSYNTAX" = "default" ] && TTAENCODERSYNTAX=tta
+			[ "$DOTAG" = "y" ] && NEEDMID3V2=y
+			[ "$TTAENCODERSYNTAX" = "ttaenc" ] && [ "$DOTAG" = "y" ] && NEEDMID3V2=y
+			;;
+		aac)
+			[ "$AACENCODERSYNTAX" = "default" ] && AACENCODERSYNTAX=faac
+			[ "$DOTAG" = "n" ]
+		# Neither Faac nor AtomicParsley can tag the .aac files which are used for faac
+		# compiled without libmp4v2... Andrew.
+			;;
+		m4a)
+			[ "$AACENCODERSYNTAX" = "default" ] && AACENCODERSYNTAX=fdkaac
+			[ "$AACENCODERSYNTAX" = "faac" ] && [ "$DOTAG" = "y" ] && CHECKFAACBUILD=y	
+			[ "$AACENCODERSYNTAX" = "neroAacEnc" ] && NEEDNEROAACTAG=y
+			[ "$AACENCODERSYNTAX" = "qaac" ] && NEEDWINE=y
+			[ "$AACENCODERSYNTAX" = "fhgaacenc" ] && NEEDWINE=y && NEEDATOMICPARSLEY=y
+			[ "$AACENCODERSYNTAX" = "ffmpeg" ] && [ "$DOTAG" = "y" ]
+			[ "$EMBEDALBUMART" = "y" ] && NEEDATOMICPARSLEY=y
+			;;
+		wav)
+			if [ "$KEEPWAVS" = "y" ]; then
+				vecho "Setting the KEEPWAVS option, since the resulting wav files were requested..."
+			fi
+			KEEPWAVS=move
+			;;
+		*)	log error "Invalid OUTPUTTYPE defined"
+			exit 1
+			;;
+	esac
+done
+
+# decide which encoder
+case "$MP3ENCODERSYNTAX" in
+	lame)
+		MP3ENCODEROPTS="${MP3ENCODEROPTSCLI:-$LAMEOPTS}"
+		MP3ENCODER="$LAME"
+		;;
+	gogo)
+		MP3ENCODEROPTS="${MP3ENCODEROPTSCLI:-$GOGOOPTS}"
+		MP3ENCODER="$GOGO"
+		;;
+	bladeenc)
+		MP3ENCODEROPTS="${MP3ENCODEROPTSCLI:-$BLADEENCOPTS}"
+		MP3ENCODER="$BLADEENC"
+		;;
+	l3enc)
+		MP3ENCODEROPTS="${MP3ENCODEROPTSCLI:-$L3ENCOPTS}"
+		MP3ENCODER="$L3ENC"
+		;;
+	xingmp3enc)
+		MP3ENCODEROPTS="${MP3ENCODEROPTSCLI:-$XINGMP3ENCOPTS}"
+		MP3ENCODER="$XINGMP3ENC"
+		;;
+	mp3enc)
+		MP3ENCODEROPTS="${MP3ENCODEROPTSCLI:-$MP3ENCOPTS}"
+		MP3ENCODER="$MP3ENC"
+		;;
+esac
+case "$OGGENCODERSYNTAX" in
+	vorbize)
+		OGGENCODEROPTS="${OGGENCODEROPTSCLI:-$VORBIZEOPTS}"
+		OGGENCODER="$VORBIZE"
+		;;
+	oggenc)
+		OGGENCODEROPTS="${OGGENCODEROPTSCLI:-$OGGENCOPTS}"
+		OGGENCODER="$OGGENC"
+		;;
+esac
+case "$OPUSENCODERSYNTAX" in
+	opusenc)
+		OPUSENCODEROPTS="${OPUSENCODEROPTSCLI:-$OPUSENCOPTS}"
+		OPUSENCODER="$OPUSENC"
+		;;
+esac
+case "$MKAENCODERSYNTAX" in
+	ffmpeg)
+		MKAENCODEROPTS="${MKAENCODEROPTSCLI:-$FFMPEGENCOPTS}"
+		MKAENCODER="$FFMPEG"
+		;;
+esac
+case "$AIFFENCODERSYNTAX" in
+	ffmpeg)
+		AIFFENCODEROPTS="${AIFFENCODEROPTSCLI:-$AIFFENCOPTS}"
+		AIFFENCODER="$FFMPEG"
+		;;
+esac
+case "$FLACENCODERSYNTAX" in
+	flac)
+		FLACENCODEROPTS="${FLACENCODEROPTSCLI:-$FLACOPTS}"
+		FLACENCODER="$FLAC"
+		if [ "$DOREPLAYGAIN" = "y" ]; then
+			FLACENCODEROPTS="${FLACENCODEROPTS} --replay-gain"
+		fi
+		# FLAC streams can be encapsulated on a Ogg transport layer
+		if echo "$FLACENCODEROPTS" | grep -E -- "(^| )--ogg($| )" > /dev/null 2>&1 ;then
+			log error "FLAC on an Ogg container is not yet supported"
+			log error "due to problem with adding comments to such files"
+			exit 1
+			FLACOUTPUTCONTAINER=ogg
+		else
+			FLACOUTPUTCONTAINER=flac
+		fi
+		;;
+esac
+case "$SPEEXENCODERSYNTAX" in
+	speexenc)
+		SPEEXENCODEROPTS="${SPEEXENCODEROPTSCLI:-$SPEEXENCOPTS}"
+		SPEEXENCODER="$SPEEXENC"
+		;;
+esac
+case "$MPCENCODERSYNTAX" in
+	mpcenc)
+		MPCENCODEROPTS="${MPCENCODEROPTSCLI:-$MPCENCOPTS}"
+		MPCENCODER="$MPCENC"
+		;;
+esac
+case "$WVENCODERSYNTAX" in
+	wavpack)
+		# Syntax changed slightly between abcde 2.7 and abcde 2.7.1,
+		# and in the interests of backward compatibility:
+		if [ -z "$WAVPACKENCOPTS" ] && [ -n "$WVENCOPTS" ]; then
+			WVENCODEROPTS="${WVENCODEROPTSCLI:-$WVENCOPTS}"
+			WVENCODER="$WAVPACK"
+		else
+			WVENCODEROPTS="${WVENCODEROPTSCLI:-$WAVPACKENCOPTS}"
+			WVENCODER="$WAVPACK"
+		fi
+		;;
+	ffmpeg)
+		WVENCODEROPTS="${WVENCODEROPTSCLI:-$FFMPEGENCOPTS}"
+		WVENCODER="$FFMPEG"
+		;;
+esac
+case "$TTAENCODERSYNTAX" in
+	tta)
+		TTAENCODEROPTS="${TTAENCODEROPTSCLI:-$TTAENCOPTS}"
+		TTAENCODER="$TTA"
+		;;
+	ttaenc)
+		TTAENCODEROPTS="${TTAENCODEROPTSCLI:-$TTAENCOPTS}"
+		TTAENCODER="$TTAENC"
+		;;
+esac
+case "$APENCODERSYNTAX" in
+	mac)
+		APENCODEROPTS="${APENCODEROPTSCLI:-$APENCOPTS}"
+		APENCODER="$APENC"
+		;;
+esac
+case "$MP2ENCODERSYNTAX" in
+	twolame)
+		MP2ENCODEROPTS="${MP2ENCODEROPTSCLI:-$TWOLAMENCOPTS}"
+		MP2ENCODER="$TWOLAME"
+		;;
+	ffmpeg)
+		MP2ENCODEROPTS="${MP2ENCODEROPTSCLI:-$FFMPEGENCOPTS}"
+		MP2ENCODER="$FFMPEG"
+		;;
+esac
+case "$AACENCODERSYNTAX" in
+		# Some elaborate 'if' work to keep backward compatibility for those
+		# who don't realise that AACENCOPTS does not work with abcde from
+		# version 2.7 onwards.
+	faac)
+		if [ -z "$FAACENCOPTS" ] && [ -n "$AACENCOPTS" ]; then
+			AACENCODEROPTS="${AACENCODEROPTSCLI:-$AACENCOPTS}"
+			AACENCODER="$FAAC"
+		else
+			AACENCODEROPTS="${AACENCODEROPTSCLI:-$FAACENCOPTS}"
+			AACENCODER="$FAAC"
+		fi
+		;;
+	neroAacEnc)
+		if [ -z "$NEROAACENCOPTS" ] && [ -n "$AACENCOPTS" ]; then
+			AACENCODEROPTS="${AACENCODEROPTSCLI:-$AACENCOPTS}"
+			AACENCODER="$NEROAACENC"
+		else	    
+			AACENCODEROPTS="${AACENCODEROPTSCLI:-$NEROAACENCOPTS}"
+			AACENCODER="$NEROAACENC"
+		fi
+		;;
+	fdkaac)
+		if [ -z "$FDKAACENCOPTS" ] && [ -n "$AACENCOPTS" ]; then
+			AACENCODEROPTS="${AACENCODEROPTSCLI:-$AACENCOPTS}"
+			AACENCODER="$FDKAAC"
+		else
+			AACENCODEROPTS="${AACENCODEROPTSCLI:-$FDKAACENCOPTS}"
+			AACENCODER="$FDKAAC"
+		fi
+		;;
+	qaac)
+		if [ -z "$QAACENCOPTS" ] && [ -n "$AACENCOPTS" ]; then
+			AACENCODEROPTS="${AACENCODEROPTSCLI:-$AACENCOPTS}"
+			AACENCODER="$QAAC"
+		else
+			AACENCODEROPTS="${AACENCODEROPTSCLI:-$QAACENCOPTS}"
+			AACENCODER="$QAAC"
+		fi
+		;;
+	fhgaacenc)
+		if [ -z "$FHGAACENCOPTS" ] && [ -n "$AACENCOPTS" ]; then
+			AACENCODEROPTS="${AACENCODEROPTSCLI:-$AACENCOPTS}"
+			AACENCODER="$FHGAACENC"
+		else
+			AACENCODEROPTS="${AACENCODEROPTSCLI:-$FHGAACENCOPTS}"
+			AACENCODER="$FHGAACENC"
+		fi
+		;;
+	ffmpeg)
+		if [ -z "$FFMPEGENCOPTS" ] && [ -n "$AACENCOPTS" ]; then
+			AACENCODEROPTS="${AACENCODEROPTSCLI:-$AACENCOPTS}"
+			AACENCODER="$FFMPEG"
+		else
+			AACENCODEROPTS="${AACENCODEROPTSCLI:-$FFMPEGENCOPTS}"
+			AACENCODER="$FFMPEG"
+		fi
+		;;
+esac
+
+# and which tagger
+case "$ID3TAGV" in
+	id3v1)
+		TAGGER="$ID3"
+		ID3SYNTAX=id3
+		TAGGEROPTS="$ID3OPTS"
+		;;
+	id3v2.3)
+		TAGGER="$ID3V2"
+		ID3SYNTAX=id3v2
+		TAGGEROPTS="$ID3V2OPTS"
+		;;
+	id3tag)
+		TAGGER="$ID3TAG"
+		ID3SYNTAX=id3tag
+		TAGGEROPTS="$ID3TAGOPTS"
+		;;
+	id3v2.4)
+		TAGGER="$EYED3"
+		# Note that eyeD3 is set to tag in utf-16 (below). This causes
+		# trouble with CDDBPROTO=5 (which we test here) but also
+		# with cached cddb files in latin1 (which we cannot test).
+		if [ "$CDDBPROTO" -lt 6 ]; then
+			log warning "You cannot have id3v2.4 tags encoded in latin1. Setting CDDBPROTO to 6 for now."
+			CDDBPROTO=6
+		fi
+		# eyeD3 version 0.7 changed syntax
+		if $EYED3 --help 2>&1 | grep -q -- --set-encoding ; then
+			# only if it offers the --set-encoding, assume <= 0.6.x
+			ID3SYNTAX=eyed3_06
+			TAGGEROPTS="--set-encoding utf16-LE $EYED3OPTS"
+		else
+			# anything wrong, any failure, assume >= 0.7
+			ID3SYNTAX=eyed3
+			TAGGEROPTS="--encoding utf16 $EYED3OPTS"
+		fi
+		;;
+	*)
+		log error "Error: ID3TAGV must be either \"id3v1\", \"id3v2.3\" or \"id3v2.4\""
+		exit 1
+		;;
+esac
+
+# NOGAP is specific to lame. Other encoders fail ...
+if [ "$NOGAP" = "y" ] && [ ! "$MP3ENCODER" = "lame" ]; then
+	log warning "the NOGAP option is specific to lame. Deactivating..."
+	NOGAP=n
+fi
+
+# Options for mkcue
+case "$CUEREADERSYNTAX" in
+	default|mkcue)
+		CUEREADEROPTS="${CDROM}"
+		CUEREADER="$MKCUE"
+		;;
+	abcde.mkcue)
+		CUEREADEROPTS="$MKCUEOPTS ${CDROM}"
+		CUEREADER="$MKCUE"
+		;;
+esac
+
+# which information retrieval tool are we using?
+case "$CDDBTOOL" in
+	cddb) ;;
+	musicbrainz) ;;
+esac
+
+# Check if both OGGEOUTPUTCONTAINER and FLACOUTPUTCONTAINER are the same, and differentiante them
+if [ X"$OGGOUTPUTCONTAINER" = "Xogg" ] && [ X"$FLACOUTPUTCONTAINER" = "Xogg" ]; then
+	log error "FLAC on an Ogg container is not yet supported"
+	log error "due to problem with adding comments to such files"
+	exit 1
+	OGGOUTPUTCONTAINER=ogg.ogg
+	FLACOUTPUTCONTAINER=flac.ogg
+	vecho warning "modified file endings due to conflicting transport"
+	vecho warning "layers in Ogg/Vorbis and Ogg/FLAC"
+fi
+
+# Clean up nice options (either use '-n NICELEVEL or -NICELEVEL')
+
+if [ "$ENCNICE" ]; then
+	ENCNICE="-n $ENCNICE"
+fi
+if [ "$READNICE" ]; then
+	READNICE="-n $READNICE"
+fi
+if [ "$DISTMP3NICE" ]; then
+	DISTMP3NICE="-n $DISTMP3NICE"
+fi
+
+# Don't check for stuff if it's not needed
+if [ "$REMOTEHOSTS" ]; then
+	NEEDDISTMP3=y
+fi
+if [ "$DONORMALIZE" = "y" ]; then
+	NEEDNORMALIZER=y
+fi
+if [ "$EJECTCD" = "y" ]; then
+	NEEDEJECT=y
+fi
+if [ ! "$CDDBAVAIL" = "n" ] && [ "$DOCDDB" = "y" ]; then
+	# Need an http tool to be able to do CDDB
+	case $CDDBMETHOD in
+		*cddb*)
+			NEEDHTTPGET=y;;
+	esac
+fi
+if [ "$DOCUE" = "y" ]; then
+	NEEDCUEREADER=y
+fi
+
+if [ X"$CDSPEEDVALUE" != "X" ] && [ "$DOREAD" = "y" ]; then
+	case "$CDROMREADERSYNTAX" in
+		cdparanoia|libcdio|debug) CDROMREADEROPTS="$CDPARANOIAOPTS -S $CDSPEEDVALUE" ;;
+		pird) CDROMREADEROPTS="$PIRDOPTS -s $CDSPEEDVALUE" ;;
+		### FIXME ### translate "cue2discid" from python to bash
+		flac) NEEDMETAFLAC=y ; NEEDCUE2DISCID=y ; CDSPEEDVALUE="" ;;
+		*) NEEDCDSPEED=y ;;
+	esac
+fi
+
+if [ "$GETALBUMART" = "y" ]; then
+	NEEDHTTPGET="y"
+	NEEDGLYRC="y"
+fi
+
+###USEPIPESSUPPORT###
+
+# Rippers with USEPIPE support
+PIPERIPPER_cdparanoia="-"
+PIPERIPPER_libcdio="-"
+# Note that by default in abcde cdda2wav redirects to icedax.        
+PIPERIPPER_cdda2wav="-"
+PIPERIPPER_debug="-"
+PIPERIPPER_flac="-c "
+PIPERIPPER_pird="-"
+
+# Encoders with USEPIPE support
+PIPE_mp3enc="-sti"
+PIPE_lame="-"
+PIPE_bladeenc="stdin"
+PIPE_oggenc="-"
+PIPE_opusenc="-"
+PIPE_flac="-"
+PIPE_speexenc="-"
+PIPE_mpcenc="-"
+PIPE_wavpack="-"
+PIPE_faac="-"
+PIPE_qaac="-"
+PIPE_fhgaacenc="-"
+PIPE_ffmpeg="-"
+PIPE_tta="-"
+PIPE_ttaenc="-"
+# Both neroAacEnc and fdkaac seem to manage without the addition of
+# the 'ignorelength' option in PIPE_$AACENCODERSYNTAX when piping
+# in this manner.                                           Andrew.
+PIPE_neroAacEnc="-"
+PIPE_fdkaac="-"
+
+# Figure out if we can use pipes with the ripper/encoder combination
+# exit otherwise
+if [ "$USEPIPES" = "y" ]; then
+	PIPERIPPERSVARCHECK="PIPERIPPER_${CDROMREADERSYNTAX}"
+	case "$OUTPUT" in
+		mp3)
+			PIPEENCODERSVARCHECK="PIPE_$MP3ENCODERSYNTAX" ;;
+		vorbis|ogg)
+			PIPEENCODERSVARCHECK="PIPE_$OGGENCODERSYNTAX" ;;
+		opus)
+			PIPEENCODERSVARCHECK="PIPE_$OPUSENCODERSYNTAX" ;;
+		mka)
+			PIPEENCODERSVARCHECK="PIPE_$MKAENCODERSYNTAX" ;;
+		aiff)
+			PIPEENCODERSVARCHECK="PIPE_$AIFFENCODERSYNTAX" ;;
+		flac)
+			PIPEENCODERSVARCHECK="PIPE_$FLACENCODERSYNTAX" ;;
+		spx)
+			PIPEENCODERSVARCHECK="PIPE_$SPEEXENCODERSYNTAX" ;;
+		mpc)
+			PIPEENCODERSVARCHECK="PIPE_$MPCENCODERSYNTAX" ;;
+		wv)
+			PIPEENCODERSVARCHECK="PIPE_$WVENCODERSYNTAX" ;;
+		tta)
+			PIPEENCODERSVARCHECK="PIPE_$TTAENCODERSYNTAX" ;;
+		m4a)
+			PIPEENCODERSVARCHECK="PIPE_$AACENCODERSYNTAX" ;;
+		aac)
+			PIPEENCODERSVARCHECK="PIPE_$AACENCODERSYNTAX" ;;
+	esac
+	decho "PIPERIPPERSVARCHECK: $( eval echo "\$$PIPERIPPERSVARCHECK" )"
+	if [ "$( eval echo "\$$PIPERIPPERSVARCHECK" )" = "$" ] || \
+	   [ "$( eval echo "\$$PIPERIPPERSVARCHECK" )" = "" ] ; then
+		log error "no support for pipes with given ripper"
+		log error "read the FAQ file from the source tarball to get help."
+		exit 1;
+	fi
+	decho "PIPEENCODERSVARCHECK: $( eval echo "\$$PIPEENCODERSVARCHECK" )"
+	if [ "$( eval echo "\$$PIPEENCODERSVARCHECK" )" = "$" ] || \
+	   [ "$( eval echo "\$$PIPEENCODERSVARCHECK" )" = "" ] ; then
+		log error "no support for pipes with given encoder"
+		log error "read the FAQ file from the source tarball to get help"
+		exit 1;
+	fi
+fi
+
+# Make sure a buncha things exist
+for X in $CDROMREADER $CDDISCID ${NEEDTAGGER+$TAGGER} $MP3ENCODER \
+	$OGGENCODER $OPUSENCODER $MKAENCODER $FLACENCODER $SPEEXENCODER $MPCENCODER \
+	$AACENCODER $WVENCODER $CDDBTOOL $APENCODER $MP2ENCODER $TTAENCODER $AIFFENCODER \
+	${NEEDHTTPGET+$HTTPGET} ${NEEDDISTMP3+$DISTMP3} \
+	${NEEDCOMMENTER+$VORBISCOMMENT} ${NEEDMETAFLAC+$METAFLAC} \
+	${NEEDNORMALIZER+$NORMALIZER} ${NEEDEJECT+$EJECT} \
+	${NEEDDISKUTIL+diskutil} ${NEEDCDSPEED+$CDSPEED} \
+	${NEEDVORBISGAIN+$VORBISGAIN} ${NEEDMP3GAIN+$MP3GAIN} \
+	${NEEDMPCGAIN+$MPCGAIN} ${NEEDCUEREADER+$CUEREADER} \
+	${NEEDWVGAIN+WVGAIN} ${NEEDAPETAG+$APETAG} \
+	${NEEDCUE2DISCID+$CUE2DISCID} ${NEEDNEROAACTAG+$NEROAACTAG} \
+	${NEEDGLYRC+$GLYRC} ${NEEDWINE+$WINE} ${NEEDATOMICPARSLEY+$ATOMICPARSLEY} \
+	${NEEDMID3V2+$MID3V2} ${NEEDEYED3+$EYED3} ${NEEDWVTAG+$WVTAG}
+do
+	checkexec "$X"
+done
+
+# Under Debian and Ubuntu faac is compiled without libmp4v2 which means no support
+# for the mp4 container and no tagging capability. (AtomicParsley also cannot tag
+# these files). The resulting files are actually ADTS streams which belong in an 
+# aac container and with some version sniffing this is all cleaned up below. If
+# faac is compiled with libmp4v2 inline tagging occurs with faac.
+
+# FIXME: Should this be in this location? (Better incorporated into the checks above.)
+if [ "$CHECKFAACBUILD" = "y" ] && [ "$AACENCODERSYNTAX" = "faac" ] ; then
+	if faac --help 2>&1 | grep -q -F 'MP4 support unavailable.'; then 
+		echo "WARNING: Your copy of Faac does not have mp4 support"
+		echo "WARNING: Encoding untagged files to aac..."
+		# Replace m4a with aac for single and multi-output encodes:
+		OUTPUTTYPE=$(echo "$OUTPUTTYPE" | sed 's/m4a/aac/')
+	else
+		echo "Using Faac to Tag AAC Tracks..."
+	fi
+fi
+
+# And last but not least, check if we can diff between files. We do not abort,
+# since diffing is not critical...
+if [ -x "$(which "$DIFF")" ]; then :; else
+	vecho warning "Disabling diff since we cannot find it in the \$PATH..."
+	DIFF=""
+fi
+
+## Now that we have metaflac, check if we need cue2discid
+#case $CDROMREADERSYNTAX in
+#	flac)
+#		CDDBTRACKINFO=$($METAFLAC --show-tag=CDDB $CDROM | cut -d"=" -f2 | grep -E "[a-f0-9]{8}")
+#		if [ "$CDDBTRACKINFO" = "" ]; then
+#			checkexec ${NEEDCUE2DISCID+$CUE2DISCID}
+#		fi
+#		;;
+#esac
+
+CDROMREADER="$CDROMREADER $CDROMREADEROPTS"
+CDDBTOOL="$CDDBTOOL $CDDBTOOLOPTS"
+HTTPGET="$HTTPGET $HTTPGETOPTS"
+
+# Here it used to say:
+# One thousand lines in, we can start doing stuff with things
+# Well, right now we are at line 3737 ;)
+# Hey, for grins, as of 2016-08-30 this is now line 4814! -GR
+
+# Export needed things so they can be read in this subshell
+export CDDBTOOL        # Path and options for the tool to query CDDB
+export ABCDETEMPDIR    # Path to the tmpdir for this rip
+export TRACKQUEUE      # 0-padded list of tracks to be processed
+export LOWDISK         # Are we using the low-diskspace algorithm?
+export EJECTCD         # Should we eject the CD when we're finished ripping?
+export EJECT           # The commend to use to eject the CD, if we have one
+export EJECTOPTS       # Options to that command
+export CDROM           # Device path for the CD device
+export CDDBDATA        # The filename we're using for CD lookup data
+export REMOTEHOSTS     # List of remote hosts for parallel encoding, if given
+export MAXPROCS        # The number of *local* encodes to do in parallel
+export HTTPGET         # Program to use to grab files via http
+export MD5SUM          # Program to calculate MD5 checksums
+
+if [ "$DOREAD" = "y" ]; then
+	# User-definable function to set some things. Use it for
+	#  - closing the CD tray with eject -t
+	#  - set the CD speed value with eject -x
+	vecho -n "Executing customizable pre-read function... "
+
+	pre_read # Execute the user-defined pre-read function. Close the CD with it.
+
+	vecho "done."
+fi
+
+# Get ABCDETEMPDIR created and status file initialized
+do_discid
+
+if [ "$DOCDDB" = "y" ]; then
+	# start with a sane default:
+	CDDBLOCALSTATUS=notfound
+	if [ $CDDBUSELOCAL = "y" ]; then
+		do_localcddb_read
+	fi
+	if checkstatus cddb-choice > /dev/null; then
+		:
+	else
+	        NUM_CDDB_MATCHES=0
+		if [ "$CDDBLOCALSTATUS" = "notfound" ] ; then
+			idx=0
+			for CDDBMETHCHOICE in $(echo "$CDDBMETHOD"  | tr -d '	 ' | tr , ' ')
+			do
+			        addstatus "Lookup method $idx: $CDDBMETHCHOICE"
+				idx=$(($idx + 1))
+				vecho "Found $NUM_CDDB_MATCHES matches so far"
+				vecho "Trying lookup method ${CDDBMETHCHOICE}"
+
+				# Run all the desired data acquisition methods, in the order
+				# specified by the user. Each will use its own temporary
+				# subdirectory, then copy the cddbread.* etc. files up into
+				# ${ABCDETEMPDIR}
+				case "$CDDBMETHCHOICE" in
+				cddb)
+					do_cddb_read
+					;;
+				musicbrainz)
+					do_musicbrainz_read
+					;;
+				cdtext)
+					do_cdtext_read
+					;;
+				*)
+					echo "Unknown lookup method $CDDBMETHCHOICE. Aborting." >&2
+					exit 1
+					;;
+				esac
+
+			done
+
+			rm -f "${ABCDETEMPDIR}/cddbchoices"
+			CDDBDISCID=$(echo "$CDDBTRACKINFO" | cut -d' ' -f1)
+
+			if [ $NUM_CDDB_MATCHES = 0 ]; then
+				# If we got no matches, we need to
+				# generate a blank CDDB template.
+				vecho "Unable to find any matches, generating unknown template."
+				echo "No lookup matches." >> "${ABCDETEMPDIR}/cddbchoices"
+				$CDDBTOOL template $(cat "${ABCDETEMPDIR}/cddbdiscid") > "${ABCDETEMPDIR}/cddbread.0"
+				echo "template" > "${ABCDETEMPDIR}/datasource.0"
+				# List out disc title/author and contents of template
+				echo ---- Unknown Artist / Unknown Album ---- >> "${ABCDETEMPDIR}/cddbchoices"
+				UNKNOWNDISK=y
+				for TRACK in $(f_seq_row 1 $TRACKS)
+				do
+					echo "$TRACK:" "$(grep -a ^TTITLE$(($TRACK - 1))= "${ABCDETEMPDIR}/cddbread.0" | cut -f2- -d= | tr -d \\r\\n)" >> "${ABCDETEMPDIR}/cddbchoices"
+				done
+				echo >> "${ABCDETEMPDIR}/cddbchoices"
+				echo cddb-read-0-complete >> "${ABCDETEMPDIR}/status"
+				echo cddb-choice=0 >> "${ABCDETEMPDIR}/status"
+				echo 503 > "${ABCDETEMPDIR}/cddbquery"
+			else
+				# We have matches; create the cddbchoices and cddbquery
+				# files from all the inputs we have
+				if [ $NUM_CDDB_MATCHES = 1 ]; then
+					echo "Retrieved 1 match..." >> "${ABCDETEMPDIR}/cddbchoices"
+					echo -n "200 " > "${ABCDETEMPDIR}/cddbquery"
+					cat "${ABCDETEMPDIR}/cddbquery.1" >> "${ABCDETEMPDIR}/cddbquery"
+				else
+					echo "Retrieved $NUM_CDDB_MATCHES matches..." >> "${ABCDETEMPDIR}/cddbchoices"
+					echo "210 Found exact matches, list follows (until terminating .)" > "${ABCDETEMPDIR}/cddbquery"
+					for X in $(f_seq_row 1 $NUM_CDDB_MATCHES)
+					do
+						cat "${ABCDETEMPDIR}/cddbquery.$X" >> "${ABCDETEMPDIR}/cddbquery"
+					done
+					echo "." >> "${ABCDETEMPDIR}/cddbquery"
+				fi
+
+				for X in $(f_seq_row 1 $NUM_CDDB_MATCHES)
+				do
+					ATITLE=$(grep -a -e '^DTITLE=' "${ABCDETEMPDIR}/cddbread.$X" | cut -c8- | tr -d \\r\\n)
+					SOURCE=$(cat "${ABCDETEMPDIR}/datasource.$X")
+					echo "#$X ($SOURCE): ---- ${ATITLE} ----" >> "${ABCDETEMPDIR}/cddbchoices"
+                    for TRACK in $(f_seq_row 1 $TRACKS)
+					do
+                        echo "$TRACK:" "$(grep -a ^TTITLE$(($TRACK - 1))= "${ABCDETEMPDIR}/cddbread.$X" | cut -f2- -d= | tr -d \\r\\n)" >> "${ABCDETEMPDIR}/cddbchoices"
+					done
+                    echo >> "${ABCDETEMPDIR}/cddbchoices"
+				done
+			fi
+		fi
+	fi
+	do_cddbedit
+
+	eval "$($CDDBTOOL parse "$CDDBDATA")"
+fi
+
+# Before reading tracks, we set the speed of the device
+
+if [ X"$CDSPEEDVALUE" != "X" ]; then
+	case "$CDROMREADERSYNTAX" in
+		cdparanoia|libcdio|debug) ;;
+		pird) ;;
+		flac) ;;
+		*) do_cdspeed ;;
+	esac
+fi
+
+# Define the first and last track, since we might need them later in several places
+FIRSTTRACK=$( get_first $TRACKQUEUE )
+LASTTRACK=$( get_last $TRACKQUEUE )
+
+if [ -f "${ABCDETEMPDIR}/status" ] && [ X"$ERASEENCODEDSTATUS" = "Xy" ]; then
+	mv "${ABCDETEMPDIR}/status" "${ABCDETEMPDIR}/status.old"
+	grep -v ^encodetracklocation- < "${ABCDETEMPDIR}/status.old" \
+		| grep -v ^encode-output > "${ABCDETEMPDIR}/status"
+fi
+
+if checkstatus onetrack ; then ONETRACK=y ; fi
+
+if [ "$ONETRACK" = "y" ]; then
+	# Reuse the CUEFILE in case we created it (now or in a previous run)
+	if CUEFILE=$(checkstatus cuefile); then
+		IMPORTCUESHEET=y
+	fi
+fi
+
+# Create playlist if needed (backgroundable) and start reading in tracks
+
+(
+
+if [ ! "$ONETRACK" = "y" ]; then
+	if [ "$DOPLAYLIST" = "y" ]; then
+		echo Creating playlist... >&2
+		do_playlist
+	fi
+fi
+
+if [ "$GETALBUMART" = "y" ]; then
+	do_getalbumart
+fi
+
+# For the lowdisk option, only one program is running at once so the encoder
+# can be unsilenced right away.
+if [ "$LOWDISK" = "y" ] || [ "$ONETRACK" = "y" ]; then
+	echo "encode-output=loud" >> "${ABCDETEMPDIR}/status"
+fi
+
+if [ "$ONETRACK" = "y" ]; then
+	TRACKS=$FIRSTTRACK
+	if [ "$USEPIPES" = "y" ]; then
+		if checkstatus "readencodetrack-$FIRSTTRACK"; then :; else
+			do_cdread onetrack $FIRSTTRACK $LASTTRACK | do_encode $FIRSTTRACK %local0% > /dev/null 2>&1
+		fi
+	else
+		if checkstatus "readtrack-$FIRSTTRACK"; then :; else
+			do_cdread onetrack $FIRSTTRACK $LASTTRACK
+		fi
+	fi
+else
+	for UTRACKNUM in $TRACKQUEUE
+	do
+		if [ "$DOREAD" = "y" ]; then
+			if [ "$USEPIPES" = "y" ]; then
+				if checkstatus "readencodetrack-$UTRACKNUM"; then :; else
+					# Read, pipe, shut up!
+					do_cdread $UTRACKNUM | do_encode $UTRACKNUM %local0% > /dev/null 2>&1
+				fi
+			else
+				if checkstatus "readtrack-$UTRACKNUM"; then :; else
+					do_cdread $UTRACKNUM
+				fi
+				if [ "$?" != "0" ]; then
+					# CD read failed - don't give the goahead to
+					# the encoder
+					echo NO
+					exit
+				fi
+			fi
+		fi
+		if [ "$NOGAP" = "y" ] || [ "$BATCHNORM" = "y" ]; then
+			:
+		else
+			# If we are not reading, set the encode output to loud already, so
+			# that we can see the output of the first track.
+			if [ "$MAXPROCS" = "1" ] && [ ! "$DOREAD" = "y" ]; then
+				echo "encode-output=loud" >> "${ABCDETEMPDIR}/status"
+			fi
+			echo NEXTTRACK # Get the encoder machine churning again
+			if [ "$DOREAD" = "y" ]; then
+				if [ "$LOWDISK" = "y" ] && [ "$DOENCODE" = "y" ]; then
+					until checkstatus "encodetrack-$UTRACKNUM"
+					do
+						if checkerrors "encodetrack-$UTRACKNUM"; then
+							break
+						fi
+						sleep 2
+					done
+				fi
+			fi
+		fi
+	done
+fi
+
+# Now that we're done the encoding can be loud again -
+# if we're not using SMP.
+if [ "$MAXPROCS" = "1" ]; then
+	echo "encode-output=loud" >> "${ABCDETEMPDIR}/status"
+fi
+
+# All tracks read, start encoding.
+if [ "$NOGAP" = "y" ] || [ "$BATCHNORM" = "y" ] || [ "$ONETRACK" = "y" ]; then
+	echo NEXTTRACK
+fi
+
+# Execute the user-defined post_read function before ejecting CD
+post_read
+
+# We are now finished with the cdrom - it can be safely ejected. Note that
+# abcde will not have completed yet.
+if [ "$EJECTCD" = "y" ]; then
+	# We check if the disk we are processing is actually the disk inside the
+	# CD tray. If not, we do not eject the CD, since it might be so that the
+	# user ejected it manually.
+	#CURRENTTRACKINFO=$($CDDISCID $CDROM)
+	#if if [ "$?" != "1" ] && [ "$CURRENTTRACKINFO" = "$CDDBTRACKINFO" ] ; then
+	# More FreeBSD bits.
+	if [ X"$UNAME" = X"FreeBSD" ] ; then
+		# FreeBSD eject uses the EJECT environment variable to name the CDROM
+		# but in this script EJECT is in the envionment and names the program
+		eject=$EJECT
+		unset EJECT
+		# The FreeBSD eject needs "adc0" not "/dev/adc0c"
+		cd="$(echo "$CDROM" | sed -e 's=.*/==;s=[a-h]$==;')"
+		$eject $EJECTOPTS $cd
+	elif [ X"$UNAME" = X"Darwin" ] ; then
+		diskutil eject "${CDROM#/dev/}" 0
+	elif [ -x "$(which "$EJECT")" ]; then
+		$EJECT $EJECTOPTS "$CDROM"
+	fi
+	#fi
+fi
+
+) | (
+
+## Do we need to pre-process
+#if [ x"$PREPROCESS" = "x" ] ; then
+#	cat
+#else
+#	for PRETRACKNUM in $TRACKQUEUE
+#	do
+#		read GOAHEAD
+#		if [ "$GOAHEAD" = "NO" ]; then break; fi
+#		PREPROCEED=
+#		until [ $PREPROCEED ]
+#		do
+#			if checkstatus "readtrack-$PRETRACKNUM"; then PREPROCEED=y; break; fi
+#			# all locations are working, wait and try again later
+#			if [ ! $PREPROCEED ]; then sleep 3; fi
+#		done
+#		( do_preprocess $PRETRACKNUM
+#		echo "NEXTTRACK"
+#		) &
+#	done
+#fi
+#
+#) | (
+
+# In BATCHNORM and/or NOGAP modes, we want all tracks to be read first.
+#BACK
+if [ "$BATCHNORM" = "y" ] || [ "$NOGAP" = "y" ]; then
+	read GOAHEAD # For blocking - will contain either "NO" or "NEXTTRACK"
+	if [ "$GOAHEAD" != "NO" ]; then
+		for LASTTRACK in $TRACKQUEUE; do :; done
+		if checkstatus "readtrack-$LASTTRACK"; then
+			if [ "$DONORMALIZE" = "y" ] && [ "$BATCHNORM" = "y" ]; then
+				if checkstatus "normalizetrack-$LASTTRACK"; then :; else do_batch_normalize; fi
+				if checkerrors batch-normalize; then exit 1; fi
+			fi
+			if [ "$DOENCODE" = "y" ] && [ "$NOGAP" = "y" ]; then
+				if [ "$DONORMALIZE" = "y" ]; then
+					for UTRACKNUM in $TRACKQUEUE
+					do
+						if checkstatus "readtrack-$UTRACKNUM"; then
+							if checkstatus "normalizetrack-$UTRACKNUM"; then :; else do_normalize "$UTRACKNUM"; fi
+						fi
+					done
+				fi
+				if checkstatus "encodetrack-$LASTTRACK"; then :; else do_nogap_encode; fi
+				if checkerrors nogap-encode; then exit 1; fi
+			fi
+		fi
+	fi
+fi
+
+# If we are using ONETRACK, we can proceed with the normal encoding using just the $FIRSTTRACK as TRACKQUEUE
+if [ "$ONETRACK" = "y" ] ; then
+	TRACKQUEUE="$FIRSTTRACK"
+	TRACKS="$FIRSTTRACK"
+fi
+
+# Do the encoding, including parallelization of remote encoding
+# Figure out where each track is going to be encoded
+ENCODELOCATIONS="$(echo "$REMOTEHOSTS" | tr , ' ')"
+if [ "$MAXPROCS" != "0" ]; then
+	for NUM in $(f_seq_row 1 $MAXPROCS)
+	do
+		ENCODELOCATIONS="$ENCODELOCATIONS %local$NUM%"
+	done
+fi
+# Strip whitespace
+ENCODELOCATIONS=$(echo $ENCODELOCATIONS)
+for UTRACKNUM in $TRACKQUEUE
+do
+	# Wait for our cue
+	read GOAHEAD # For blocking - will contain either "NO" or "NEXTTRACK"
+	if [ "$GOAHEAD" = "NO" ]; then break; fi
+	# find out where this track is to be encoded
+	if [ "$DOENCODE" = "y" ] && [ "$USEPIPES" != "y" ]; then
+		# Make sure we have a place to encode this, if not, exit stage right
+		if [ -z "$ENCODELOCATIONS" ]; then
+			continue
+		fi
+		PROCEED=
+		until [ $PROCEED ]
+		do
+			for LOCATION in $ENCODELOCATIONS
+			do
+				PREVIOUSTRACK="$(checkstatus "encodetracklocation-$LOCATION")"
+				# check first if a track has ever been assigned to this location
+				if [ -z "$PREVIOUSTRACK" ]; then PROCEED=y; break; fi
+				# If it errored out, rebuild $ENCODELOCATIONS without this location in it
+				if checkerrors "encodetrack-$PREVIOUSTRACK"; then
+					for TEMPLOCATION in $ENCODELOCATIONS
+					do
+						if [ "$TEMPLOCATION" != "$LOCATION" ]; then
+							TEMPENCODELOCATIONS="$TEMPENCODELOCATIONS $TEMPLOCATION"
+						fi
+					done
+					ENCODELOCATIONS=$(echo $TEMPENCODELOCATIONS)
+					ABORT=y
+					PROCEED=y
+					break
+				fi
+				# We're still here, this location must have been previously assigned,
+				# and last completed without error - check if it's done with the
+				# previous track yet
+				if checkstatus "encodetrack-$PREVIOUSTRACK"; then PROCEED=y; break; fi
+			done
+			# all locations are working, wait and try again later
+			if [ ! "$PROCEED" ]; then sleep 3; fi
+		done
+		# Record the location we're about to encode the next track at
+		echo "encodetracklocation-$LOCATION=$UTRACKNUM" >> "${ABCDETEMPDIR}/status"
+	fi
+	# Don't proceed with the rest of the loop if we can't encode
+	if [ "$ABORT" ]; then continue; fi
+	## FIXME ## Add here
+	## run_command "tagtrack-$OUTPUT-$1" $METAFLAC $METAFLACOPTS ${IMPORTCUESHEET:+--import-cuesheet-from="${ABCDETEMPDIR}/$CUEFILE"} --import-tags-from=- "${ABCDETEMPDIR}/track$1.$FLACOUTPUTCONTAINER"
+	# Set TRACKNUM, TRACKNAME
+	if [ -e "$CDDBDATA" ]; then
+		if [ "$ONETRACK" = "y" ]; then
+			TRACKNAME="$DALBUM"
+			TRACKNUM="$FIRSTTRACK"
+			splitvarious
+		else
+			TRACKNUM="$UTRACKNUM"
+			CDDBTRACKNUM=$(expr $UTRACKNUM - 1) # Unpad
+			getcddbinfo TRACKNAME
+			splitvarious
+		fi
+	fi
+	# You can't encode a file which needs to be normalized before finishing
+	# You can't tag a file before it's finished encoding -
+	# thus all of this is backgrounded together
+	(
+	if [ "$DONORMALIZE" = "y" ]; then
+		if checkstatus "readtrack-$UTRACKNUM"; then
+			if checkstatus "normalizetrack-$UTRACKNUM"; then :; else do_normalize "$UTRACKNUM"; fi
+		fi
+	fi
+	if [ "$DOENCODE" = "y" ] && [ "$USEPIPES" != "y" ]; then
+		if checkstatus "readtrack-$UTRACKNUM"; then
+			if [ "$DONORMALIZE" = "y" ]; then
+				if checkstatus "normalizetrack-$UTRACKNUM"; then
+					if checkstatus "encodetrack-$UTRACKNUM"; then :; else do_encode "$UTRACKNUM" "$LOCATION" "$OUTPUT"; fi
+				fi
+			else
+				if checkstatus "encodetrack-$UTRACKNUM"; then :; else do_encode "$UTRACKNUM" "$LOCATION" "$OUTPUT"; fi
+			fi
+		fi
+	fi
+	if [ "$DOTAG" = "y" ]; then
+		if checkstatus "encodetrack-$UTRACKNUM"; then
+			if checkstatus "tagtrack-$UTRACKNUM"; then :; else do_tag "$UTRACKNUM"; fi
+		fi
+		# Lets tag the cue file
+		if checkstatus cleancuefile >/dev/null; then :; else
+			if checkstatus cuefile >/dev/null ; then
+				do_cleancue
+			fi
+		fi
+	fi
+	if [ "$DOMOVE" = "y" ]; then
+		if checkstatus "tagtrack-$UTRACKNUM"; then
+			if checkstatus "movetrack-$UTRACKNUM"; then :; else do_move "$UTRACKNUM"; fi
+		fi
+	fi
+	) &
+done
+
+
+# Go through it again and make sure there's no distmp3 stragglers, otherwise
+# we'll delete the files they're working on
+# Do NOT play ball if there is no ball to play (so ABORT if needed)
+## FIXME ## Check also for files which are encoded using PIPEs.
+if [ "$DOENCODE" = "y" ] && [ "$USEPIPES" != "y" ] && [ ! "$ABORT" ]; then
+	PROCEED=
+	until [ $PROCEED ]
+	do
+		PROCEED=y
+		for LOCATION in $ENCODELOCATIONS
+		do
+			CHECKTRACK="$(checkstatus "encodetracklocation-$LOCATION")"
+			# "How can he give us a status update, if he's DEAD?"
+			if checkstatus "encodetrack-$CHECKTRACK"; then
+				continue
+			fi
+			# Nothing to see here please go quietly back to your homes
+			if [ -z "$CHECKTRACK" ]; then continue; fi
+			# You're still here? Maybe there is something...
+			if checkstatus "encodetrack-$CHECKTRACK"; then :;	else PROCEED= ; break; fi
+		done
+		# hold up
+		if [ ! $PROCEED ]; then sleep 5; fi
+	done
+fi
+# If the above didn't catch the stragglers, this will
+wait
+if [ "$DOREPLAYGAIN" = "y" ]; then
+	do_replaygain
+fi
+
+if [ "$EMBEDALBUMART" = "y" ]; then
+	do_embedalbumart
+fi
+
+# Execute the user-defined post_encode function before cleaning up
+post_encode
+
+# Check to see if run_command logged any errors
+if [ -f "${ABCDETEMPDIR}/errors" ]; then
+	log error "The following commands failed to run:"
+	cat "${ABCDETEMPDIR}/errors"
+	# Don't clean up
+	DOCLEAN=n
+fi
+if [ "$KEEPWAVS" = "y" ];then
+	# Don't clean up
+	DOCLEAN=n
+fi
+# Check if we have moved all the formats we had previously encoded, if we are not using the FORCE.
+if [ "$DOCLEAN" = "y" ] && [ ! "$FORCE" = "y" ]; then
+	ENCODED_FORMATS=$(grep -E "^encodetrack-(.{3,6})-(.{1,2})$" "${ABCDETEMPDIR}/status" | cut -d"-" -f2 | sort -u | tr '\n' '|')
+	MOVED_FORMATS=$(grep -E "^movetrack-output-(.{3,6})$" "${ABCDETEMPDIR}/status" | cut -d"-" -f3 | sort -u | tr '\n' '|')
+	if [ "$ENCODED_FORMATS" != "$MOVED_FORMATS" ]; then
+		log warning "The encoded formats does not match with the moved ones"
+		log warning "Formats encoded: $( echo "$ENCODED_FORMATS" | tr "|" " " )"
+		log warning "Formats moved: $( echo "$MOVED_FORMATS" | tr "|" " " )"
+		log warning "Use \"abcde -a clean -f -C ${CDDBDISCID}\" to force the removal of the remaining data."
+		DOCLEAN=n
+	fi
+fi
+if [ "$DOCLEAN" = "y" ]; then
+	# Wipe all the evidence
+	# Gimme gimme gimme some more time!
+	sleep 5
+	rm -rf "${ABCDETEMPDIR}"
+	echo "Finished."
+else
+	echo "Finished. Not cleaning ${ABCDETEMPDIR}."
+fi
+)
+exit 0
+
+# b:is_bash
+# vim:tabstop=4

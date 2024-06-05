@@ -1,0 +1,414 @@
+#!/usr/bin/perl
+# Copyright (c) 2012-2018 Steve McIntyre <93sam@debian.org>
+# This code is hereby licensed for public consumption under either the
+# GNU GPL v2 or greater, or Larry Wall's Artistic license - your choice.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#
+# abcde-musicbrainz-tool
+#
+# Helper script for abcde to work with the MusicBrainz WS API (v2)
+
+use strict;
+use utf8;
+use POSIX qw(ceil);
+use Digest::SHA;
+use MusicBrainz::DiscID;
+use WebService::MusicBrainz 1.0.4;
+use Getopt::Long;
+use Pod::Usage;
+
+my $FRAMES_PER_S = 75;
+
+my ($device, $command, $discid, @discinfo, $workdir, $help, $man, $start);
+Getopt::Long::Configure ('no_ignore_case');
+Getopt::Long::Configure ('no_auto_abbrev');
+GetOptions ("device=s"       => \$device,
+            "command=s"      => \$command,
+            "discid=s"       => \$discid,
+            "discinfo=i{5,}" => \@discinfo,
+            "workdir=s"      => \$workdir,
+            "start=s"        => \$start,
+            "help|h"         => \$help,
+            "man"            => \$man) or pod2usage(-verbose => 0, -exitcode => 2);
+if (@ARGV) {
+    print STDERR "Extraneous arguments given.\n";
+    pod2usage(-verbose => 0, -exitcode => 2);
+}
+pod2usage(-verbose => 1, -exitcode => 0) if $help;
+pod2usage(-verbose => 2, -exitcode => 0) if $man;
+
+# defaults
+if (!defined($device)) {
+    $device = "/dev/cdrom";
+}
+if (!defined($command)) {
+    $command = "id";
+}
+if (!defined($workdir)) {
+    $workdir = "/tmp";
+}
+if (!defined($start)) {
+    $start = "0";
+}
+
+sub calc_sha1($) {
+    my $filename = shift;
+    my $s = Digest::SHA->new(1);
+    $s->addfile($filename);
+    return $s->hexdigest;
+}
+
+if ($command =~ m/^id/) {
+    my $disc = new MusicBrainz::DiscID($device);
+
+    # read the disc in the default disc drive */
+    if ( $disc->read() == 0 ) {
+        printf STDERR "Error: %s\n", $disc->error_msg();
+        exit(1);
+    }
+
+    printf("%s ", $disc->id());
+    printf("%d ", $disc->last_track_num() + 1 - $disc->first_track_num());
+
+    for ( my $i = $disc->first_track_num;
+          $i <= $disc->last_track_num; $i++ ) {
+        printf("%d ", $disc->track_offset($i));
+    }
+    printf("%d\n", $disc->sectors() / $FRAMES_PER_S);
+    undef $disc;
+} elsif ($command =~ m/data/) {
+    if (!defined $discid or !$discid) {
+	print STDERR "Discid undefined.\n";
+	exit(1);
+    }
+    my $ws = WebService::MusicBrainz->new();
+    my $response = $ws->search(discid => {
+	discid => $discid,
+	inc => ['artists', 'artist-credits', 'recordings']
+        });
+
+    if ($response->{'error'}) {
+	print STDERR "MusicBrainz lookup returned an error \"$response->{'error'}\"\n";
+	exit(0);
+    }
+
+    my $releasenum = $start;
+    my @sums;
+
+    if ($response->{'releases'}) {
+	my @releases = @{ $response->{'releases'} };
+	foreach my $release (@releases) {
+	    my $a_artist = "";
+	    my $number_artists = @{ $release->{'artist-credit'}};
+	    if ($number_artists > 0) {
+		for (my $i = 0; $i < $number_artists; $i++) {
+		    if ($i > 0) {
+			$a_artist = $a_artist . @{ $release->{'artist-credit'} }[$i-1]->{'joinphrase'};
+		    }
+		    $a_artist = $a_artist . @{ $release->{'artist-credit'} }[$i]->{'name'};
+		}
+	    }
+	    my $va = 0;
+	    my $rel_year = "";
+	    if ($a_artist =~ /Various Artists/) {
+		$va = 1;
+	    }
+
+	    if ($release->{'release-events'}) {
+		my @release_events = @{ $release->{'release-events'} };
+		if (@release_events > 0) {
+		    $rel_year =  substr(@release_events[0]->{'date'},0,4);
+		}
+	    }
+	    $releasenum++;
+	    open (OUT, "> $workdir/cddbread.$releasenum");
+	    binmode OUT, ":utf8";
+	    print OUT "# xmcd style database file\n";
+	    print OUT "#\n";
+	    print OUT "# Track frame offsets:\n";
+
+	    my @offsets = @{ $response->{'offsets'}};
+	    foreach my $offset (@offsets) {
+		printf OUT "#       %d\n", $offset;
+	    }
+
+	    # Locate the media that contains a disc with the discid we requested
+	    # initially. The API may return multiple media associated with the
+	    # release, including media with different discids
+	    my @mediums = grep {
+		my @disks = @{ $_->{'discs'} };
+		grep { $_->{'id'} eq $discid } @disks;
+	    } @{ $release->{'media'} };
+
+	    if (not @mediums) {
+		# This release doesn't have a media with our requested dicsid
+		# Shouldn't happen (?), skip it
+		next;
+	    }
+
+	    # Only consider the first medium
+	    my $medium = @mediums[0];
+	    my @tracks = @{ $medium->{'tracks'} };
+
+	    my $total_len = 0;
+	    for (my $i = 0; $i < scalar(@tracks); $i++) {
+		my $track = $tracks[$i];
+		$total_len += $track->{'length'};
+	    }
+
+	    print OUT "#\n";
+	    printf OUT "# Disc length: %d seconds\n", $total_len / 1000.0;
+	    print OUT "#\n";
+	    print OUT "# Submitted via: XXXXXX\n";
+	    print OUT "#\n";
+	    print OUT "#blues,classical,country,data,folk,jazz,newage,reggae,rock,soundtrack,misc\n";
+	    print OUT "#CATEGORY=none\n";
+	    print OUT "DISCID=" . $discid . "\n";
+	    print OUT "DTITLE=" . $a_artist. " / " . $release->{'title'} . "\n";
+	    print OUT "DYEAR=" . $rel_year . "\n";
+	    print OUT "DGENRE=\n";        
+
+	    for (my $i = 0; $i < scalar(@tracks); $i++) {
+		my $track = $tracks[$i];
+		my $t_name = $track->{'title'};
+		my $number_artists = @{$track->{'recording'}->{'artist-credit'}};
+		if ($va and $number_artists > 0) {
+		    my $t_artist = "";
+		    for (my $j = 0; $j < $number_artists; $j++) {
+			if ($j > 0) {
+			    $t_artist = $t_artist . @{$track->{'recording'}->{'artist-credit'}}[$j-1]->{'joinphrase'};
+			}
+			$t_artist = $t_artist . @{$track->{'recording'}->{'artist-credit'}}[$j]->{'name'};
+		    }
+		    printf OUT "TTITLE%d=%s / %s\n", $i, $t_artist, $t_name;
+		} else {
+		    printf OUT "TTITLE%d=%s\n", $i, $t_name;
+		}
+	    }
+
+	    print OUT "EXTD=\n";
+	    for (my $i = 0; $i < scalar(@tracks); $i++) {
+		printf OUT "EXTT%d=\n", $i;
+	    }
+	    print OUT "PLAYORDER=\n";
+	    print OUT ".\n";
+	    close OUT;
+
+	    # save release mbid
+	    open (OUT, "> $workdir/mbid.$releasenum");
+	    print OUT $release->{'id'};
+	    close OUT;
+
+	    # save release asin
+	    open (OUT, "> $workdir/asin.$releasenum");
+	    print OUT $release->{'asin'};
+	    close OUT;
+
+	    # Check to see that this entry is unique; generate a checksum
+	    # and compare to any previous checksums
+	    my $checksum = calc_sha1("$workdir/cddbread.$releasenum");
+	    foreach my $sum (@sums) {
+		if ($checksum eq $sum) {
+		    unlink("$workdir/cddbread.$releasenum");
+		    $releasenum--;
+		    last;
+		}
+	    }
+	    push (@sums, $checksum);
+	}
+    } else {
+	# No release events found - looks like we have a stub
+	# entry. We can parse it, but it's going to be very
+	# different.
+	print STDERR "MusicBrainz lookup only returned a stub, trying to cope\n";
+	
+	my $va = 0;
+	my $a_artist = "";
+	my $a_title = "";
+	my $rel_year = "";
+
+	if ($response->{'artist'}) {
+	    $a_artist = $response->{'artist'};
+	}
+	if ($response->{'title'}) {
+	    $a_title = $response->{'title'};
+	}
+	if ($a_artist =~ /Various Artists/) {
+	    $va = 1;
+	}
+
+	$releasenum++;
+	open (OUT, "> $workdir/cddbread.$releasenum");
+	binmode OUT, ":utf8";
+	print OUT "# xmcd style database file\n";
+	print OUT "#\n";
+	print OUT "# Musicbrainz stub entry - check carefully!\n";
+	print OUT "#\n";
+
+	my @tracks = @{ $response->{'tracks'} };
+
+	my $total_len = 0;
+	for (my $i = 0; $i < scalar(@tracks); $i++) {
+	    my $track = $tracks[$i];
+	    $total_len += $track->{'length'};
+	}
+
+	printf OUT "# Disc length: %d seconds\n", $total_len / 1000.0;
+	print OUT "#\n";
+	print OUT "# Submitted via: XXXXXX\n";
+	print OUT "#\n";
+	print OUT "#blues,classical,country,data,folk,jazz,newage,reggae,rock,soundtrack,misc\n";
+	print OUT "#CATEGORY=none\n";
+	print OUT "DISCID=" . $discid . "\n";
+	print OUT "DTITLE=" . $a_artist. " / " . $a_title . "\n";
+	print OUT "DYEAR=" . $rel_year . "\n";
+	print OUT "DGENRE=\n";        
+
+	for (my $i = 0; $i < scalar(@tracks); $i++) {
+	    my $track = $tracks[$i];
+	    my $t_name = $track->{'title'};
+	    if ($va) {
+		my $t_artist = $track->{'artist'};
+		printf OUT "TTITLE%d=%s / %s\n", $i, $t_artist, $t_name;
+	    } else {
+		printf OUT "TTITLE%d=%s\n", $i, $t_name;
+	    }
+	}
+
+	print OUT "EXTD=\n";
+	for (my $i = 0; $i < scalar(@tracks); $i++) {
+	    printf OUT "EXTT%d=\n", $i;
+	}
+	print OUT "PLAYORDER=\n";
+	print OUT ".\n";
+	close OUT;
+
+	# Check to see that this entry is unique; generate a checksum
+	# and compare to any previous checksums
+	my $checksum = calc_sha1("$workdir/cddbread.$releasenum");
+	foreach my $sum (@sums) {
+	    if ($checksum eq $sum) {
+		unlink("$workdir/cddbread.$releasenum");
+		$releasenum--;
+		last;
+	    }
+	}
+	push (@sums, $checksum);
+    }
+} elsif ($command =~ m/calcid/) {
+    # Calculate MusicBrainz ID from disc offsets; see
+    # https://musicbrainz.org/doc/DiscIDCalculation
+
+    if ($#discinfo < 5) {
+	print STDERR "Insufficient or missing discinfo data.\n";
+	exit(1);
+    }
+    my ($first, $last, $leadin, $leadout, @offsets) = @discinfo;
+
+    my $s = Digest::SHA->new(1);
+    $s->add(sprintf "%02X", int($first));
+    $s->add(sprintf "%02X", int($last));
+
+    my @a;
+    for (my $i = 0; $i < 100; $i++) {
+        $a[$i] = 0;
+    }
+    my $i = 0;
+    foreach my $o ($leadout, @offsets) {
+       $a[$i++] = int($o) + int($leadin);
+    }
+    for (my $i = 0; $i < 100; $i++) {
+       $s->add(sprintf "%08X", $a[$i]);
+    }
+
+    my $id = $s->b64digest;
+    # CPAN Digest modules do not pad their Base64 output, so we have to do it.
+    while (length($id) % 4) {
+        $id .= '=';
+    }
+
+    $id =~ tr#+#.#;
+    $id =~ tr#/#_#;
+    $id =~ tr#=#-#;
+
+    print $id;
+    if (-t STDOUT) { print "\n"; }
+} else {
+    print STDERR "Unknown command given.\n";
+    pod2usage(1);
+    exit(1);
+}
+__END__
+
+=head1 NAME
+
+abcde-musicbrainz-tool - Musicbrainz query tool
+
+=head1 SYNOPSIS
+
+ abcde-musicbrainz-tool [options]
+
+ Options:
+   --command {id|data|calcid} mode of operation (default: id)
+   --device <DEV>             read from CD-ROM device DEV (default: /dev/cdrom)
+   --discid <ID>              Disc ID to query with --command data.
+   --discinfo <F> <L> <LI> <LO> <TRK1OFF> [<TRK2OFF> [...]]
+                              Disc information for --command calcid.
+   --workdir <DIR>            working directory (default: /tmp)
+   --help                     print option summary
+   --man                      full documentation
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<--command> I<{id|data|calcid}>
+
+Select mode of operation:
+
+=over 8
+
+=item B<id>
+
+Read the disc-ID from the disc in the given device, and print it, the number of tracks, their start sectors, and the duration of the disc in seconds, to stdout. Format:
+
+ ID TRACKCOUNT OFFSET1 [OFFSET2 [...]] LENGTH_S
+
+=item B<data>
+
+Query MusicBrainz web service and store data into the workdir into cddbread.1, cddbread.2, ... files in the workdir.
+
+=item B<calcid>
+
+Calculate MusicBrainz ID from given B<--discinfo> data.
+
+=back
+
+=item B<--device>
+
+Specify CD-ROM drive's device name, to read ID from with B<--command id>.
+
+=item B<--discid>
+
+Supply disc ID for B<--command data>.
+
+=item B<--discinfo> I<<first track> <last track> <lead-in sector> <lead-out sector> <track1 offset> [<track2 offset> [...]]>
+
+Supply disc information for B<--command calcid>.
+
+=item B<--workdir> I<directory>
+
+The cddbread.* output files from B<--command data> go into this directory.
+
+=item B<--help>
+
+Print a brief help message and exit.
+
+=item B<--man>
+
+Display full manual and exit.
+
+=back

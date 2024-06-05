@@ -28,7 +28,7 @@ Getopt::Long::Configure ('no_auto_abbrev');
 GetOptions ("device=s"       => \$device,
             "command=s"      => \$command,
             "discid=s"       => \$discid,
-            "discinfo=i{5,}" => \@discinfo,
+            "discinfo=i{4,}" => \@discinfo,
             "workdir=s"      => \$workdir,
             "start=s"        => \$start,
             "help|h"         => \$help,
@@ -302,7 +302,7 @@ if ($command =~ m/^id/) {
     # Calculate MusicBrainz ID from disc offsets; see
     # https://musicbrainz.org/doc/DiscIDCalculation
 
-    if ($#discinfo < 5) {
+    if ($#discinfo < 4) {
 	print STDERR "Insufficient or missing discinfo data.\n";
 	exit(1);
     }

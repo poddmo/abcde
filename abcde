@@ -2919,7 +2919,7 @@ do_cddbedit ()
 					CDCHOICENUM=-1
 					# I'll take CDDB read #3 for $400, Alex
 					while [ $CDCHOICENUM -lt 0 ] || [ $CDCHOICENUM -gt $NUM_CDDB_MATCHES ]; do
-						echo -n "Which entry would you like abcde to use (0 for none)? [0-$NUM_CDDB_MATCHES or n,m to see differences]: " >&2
+						echo -n "Which entry would you like abcde to use? [0-$NUM_CDDB_MATCHES or h for help]: " >&2
 						read CDDBCHOICE
 						if echo $CDDBCHOICE | grep -E "[[:space:]]*[[:digit:]]+,[[:digit:]]+[[:space:]]*" > /dev/null 2>&1 ; then
 							if [ ! X"$DIFF" = "X" ]; then
@@ -2947,12 +2947,21 @@ do_cddbedit ()
 								echo "The diff program was not found in your path." >&2
 								echo "Please choose a number between 0 and $NUM_CDDB_MATCHES." >&2
 							fi
+						elif [ "$CDDBCHOICE" = "l" ]; then
+							# list choices again
+							page "${ABCDETEMPDIR}/cddbchoices"
 						elif echo $CDDBCHOICE | grep -E "[[:space:]]*[[:digit:]]+[[:space:]]*" > /dev/null 2>&1 ; then
 							# Make sure we get a valid choice
 							CDCHOICENUM=$(echo $CDDBCHOICE | xargs printf %d 2>/dev/null)
 							if [ "$CDCHOICENUM" -lt 0 ] || [ "$CDCHOICENUM" -gt "$NUM_CDDB_MATCHES" ]; then
 								echo "Invalid selection. Please choose a number between 0 and $NUM_CDDB_MATCHES." >&2
 							fi
+						else
+							echo "0: Continue with no match; you will have the option to input metadata manually." >&2
+							echo "<number>: Continue with the selected match; you will be able to make adjustments." >&2
+							echo "<n>,<m>: Show a diff between entries n and m, e.g. 1,2 or 3,5." >&2
+							echo "l: Show the list of entries again." >&2
+							echo "h: Show this help text." >&2
 						fi
 					done
 					if [ "$CDCHOICENUM" = "0" ]; then

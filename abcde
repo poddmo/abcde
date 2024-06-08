@@ -3292,14 +3292,8 @@ do_getalbumart()
 		fi
 		if [ "$INTERACTIVE" = "y" ]; then
 			if [ -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
-				# display properties of coverart when identify is available
-				if new_checkexec "$IDENTIFY"; then
-					$IDENTIFY $IDENTIFYOPTS "${ABCDETEMPDIR}/$ALBUMARTFILE" >&2
-				fi
-				# display coverart when DISPLAY is set and display command is available
-				if new_checkexec "$DISPLAYCMD" && [ "$DISPLAY" != "" ]; then
-					$DISPLAYCMD $DISPLAYCMDOPTS "${ABCDETEMPDIR}/$ALBUMARTFILE" >&2 &
-				fi
+				do_identifyart "${ABCDETEMPDIR}/$ALBUMARTFILE"
+				do_displayart "${ABCDETEMPDIR}/$ALBUMARTFILE"
 			else
 				# nothing downloaded yet
 				vecho "automatic album art downloading failed" >&2

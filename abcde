@@ -3304,24 +3304,46 @@ do_getalbumart()
 				echo -n "Do you want to enter URL or local path for the album art [y/N]? " >&2
 				read YESNO
 				while [ "$YESNO" != "y" ] && [ "$YESNO" != "n" ] && [ "$YESNO" != "Y" ] && \
-						  [ "$YESNO" != "N" ] && [ "$YESNO" != "" ]
+                                                [ "$YESNO" != "N" ] && [ "$YESNO" != "" ]
 				do
 					echo -n 'Invalid selection. Please answer "y" or "n": ' >&2
 					read YESNO
 				done
 				if [ "$YESNO" = "y" ] || [ "$YESNO" = "Y" ]; then
-					echo -n "Enter URL or local path (ENTER to cancel) :" >&2
-					read ALBUMARTURL
-					if [ ! -z "$ALBUMARTURL" ]; then
-						if [[ ${ALBUMARTURL} =~ (https?|ftp|file)://.* ]]; then
-							$HTTPGET "$ALBUMARTURL" > "${ABCDETEMPDIR}/$ALBUMARTFILE"
+					# look for local album art
+					if [ -s "${ALBUMARTDIR}/${ALBUMARTFILE}" ]; then
+						echo Local cover art found at "${ALBUMARTDIR}/${ALBUMARTFILE}"  >&2
+						do_identifyart "${ALBUMARTDIR}/$ALBUMARTFILE"
+                                		do_displayart "${ALBUMARTDIR}/$ALBUMARTFILE"
+                                		echo -n 'Do you want to use it? [Y/n] :' >&2
+						read YESNO
+						while [ "$YESNO" != "y" ] && [ "$YESNO" != "n" ] && [ "$YESNO" != "Y" ] && \
+                                                          [ "$YESNO" != "N" ] && [ "$YESNO" != "" ]
+                                        	do
+                                                	echo -n 'Invalid selection. Please answer "y" or "n": ' >&2
+                                                	read YESNO
+						done
+						if [ "$YESNO" = "y" ] || [ "$YESNO" = "Y" ] || [ "$YESNO" = "" ]; then
+							cp "${ALBUMARTDIR}/${ALBUMARTFILE}" "${ABCDETEMPDIR}/${ALBUMARTFILE}"
 							if [ ! -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
-								vecho "unable to download $ALBUMARTURL" >&2
-							fi
-						else # it's a local path
-							cp "$ALBUMARTURL" "${ABCDETEMPDIR}/$ALBUMARTFILE"
-							if [ ! -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
-								vecho "unable to copy $ALBUMARTURL to ${ABCDETEMPDIR}/$ALBUMARTFILE" >&2
+                                                		vecho "unable to copy ${ALBUMARTDIR}/${ALBUMARTFILE} to ${ABCDETEMPDIR}/{$ALBUMARTFILE}" >&2
+                                                	fi
+                                                else
+							# manually specify location of album art
+							echo -n "Enter URL or local path (ENTER to cancel) :" >&2
+							read ALBUMARTURL
+							if [ ! -z "$ALBUMARTURL" ]; then
+								if [[ ${ALBUMARTURL} =~ (https?|ftp|file)://.* ]]; then
+									$HTTPGET "$ALBUMARTURL" > "${ABCDETEMPDIR}/$ALBUMARTFILE"
+									if [ ! -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
+										vecho "unable to download $ALBUMARTURL" >&2
+									fi
+								else # it's a local path
+									cp "$ALBUMARTURL" "${ABCDETEMPDIR}/$ALBUMARTFILE"
+									if [ ! -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
+										vecho "unable to copy $ALBUMARTURL to ${ABCDETEMPDIR}/$ALBUMARTFILE" >&2
+									fi
+								fi
 							fi
 						fi
 					fi

@@ -3213,6 +3213,24 @@ do_cddbedit ()
 	echo "cddb-edit" >> "${ABCDETEMPDIR}/status"
 }
 
+# do_identifyart
+# display properties of coverart when identify is available
+do_identifyart()
+{
+        if new_checkexec "$IDENTIFY"; then
+        $IDENTIFY $IDENTIFYOPTS "$*" >&2
+    fi
+}
+
+# do_displayart
+# display coverart when DISPLAY is set and display command is available
+do_displayart()
+{
+        if new_checkexec "$DISPLAYCMD" && [ "$DISPLAY" != "" ]; then
+                $DISPLAYCMD $DISPLAYCMDOPTS "$*" >&2 &
+    fi
+}
+
 # do_getalbumart
 # try to download CD cover
 do_getalbumart()

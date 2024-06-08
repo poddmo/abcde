@@ -4030,6 +4030,7 @@ DISPLAYCMDOPTS="-resize 512x512 -title abcde_album_art"
 
 # Defaults for album art downloads
 ALBUMARTFILE="cover.jpg"
+ALBUMARTDIR="${HOME}"
 ALBUMARTTYPE="JPEG"
 ALBUMARTALWAYSCONVERT="n"
 

@@ -4043,6 +4043,7 @@ GLYRCOPTS=
 IDENTIFYOPTS=
 CONVERTOPTS=
 DISPLAYCMDOPTS="-resize 512x512 -title abcde_album_art"
+PAGEROPTS=
 
 # Defaults for album art downloads
 ALBUMARTFILE="cover.jpg"

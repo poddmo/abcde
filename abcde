@@ -1825,19 +1825,28 @@ do_playlist ()
 		FINALPLAYLISTDIR="$(dirname "$OUTPUTDIR/$PLAYLISTFILE")"
 		mkdir -p "$FINALPLAYLISTDIR"
 		if [ -s "$OUTPUTDIR/$PLAYLISTFILE" ]; then
-			echo -n "Erase, Append to, or Keep the existing playlist file? [e/a/k] (e): " >&2
+			# default to append if part of a CD set
+			if [ -n "${DISCNUMBER}" ]; then
+				echo -n "Erase, Append to, or Keep the existing playlist file? [e/a/k] (a): " >&2
+			else
+				echo -n "Erase, Append to, or Keep the existing playlist file? [e/a/k] (e): " >&2
+			fi
 			if [ "$INTERACTIVE" = "y" ]; then
 				while [ "$DONE" != "y" ]; do
 					read ERASEPLAYLIST
 					case $ERASEPLAYLIST in
 						e|E|a|A|k|K) DONE=y ;;
-						"") ERASEPLAYLIST=e ; DONE=y ;;
+						"")
+							if [ -n "${DISCNUMBER}" ]; then
+								ERASEPLAYLIST=a
+							else
+								ERASEPLAYLIST=e
+							fi
+							DONE=y
+							;;
 						*) ;;
 					esac
 				done
-			else
-				echo e >&2
-				ERASEPLAYLIST=e
 			fi
 			# Once we erase the playlist, we use append to create the new one.
 			[ "$ERASEPLAYLIST" = "e" ] || [ "$ERASEPLAYLIST" = "E" ] && rm -f "$OUTPUTDIR/$PLAYLISTFILE" && ERASEPLAYLIST=a

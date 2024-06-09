@@ -1019,7 +1019,7 @@ do_tag ()
 				esac
 			fi
 			) | run_command "tagtrack-$OUTPUT-$1" nice $ENCNICE $METAFLAC $METAFLACOPTS \
-							${IMPORTCUESHEET:+--import-cuesheet-from="${ABCDETEMPDIR}/$CUEFILE"} \
+							"${IMPORTCUESHEET:+--import-cuesheet-from=${ABCDETEMPDIR}/${CUEFILE}}" \
 							--import-tags-from=- "${ABCDETEMPDIR}/track$1.$FLACOUTPUTCONTAINER"
 			;;
 		spx)

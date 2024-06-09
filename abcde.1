@@ -211,16 +211,6 @@ Be more verbose. On slow networks the CDDB requests might give the
 sensation nothing is happening. Add this more than once to make things
 even more verbose.
 .TP
-.B \-x
-Eject the CD when all tracks have been read. See the EJECTCD configuration
-variable.
-.TP
-.B \-X [cue2discid]
-Use an alternative "cue2discid" implementation. The name of the binary must be
-exactly that. \fBabcde\fR comes with an implementation in python under the examples
-directory. The special keyword "builtin" forces the usage of the internal
-(default) implementation in shell script.
-.TP
 .B \-w [comment]
 Add a comment to the tracks ripped from the CD. If you wish to use
 parentheses, these will need to be escaped. i.e. you have to write
@@ -230,6 +220,16 @@ parentheses, these will need to be escaped. i.e. you have to write
 Concatenate CD\'s. It uses the number provided to define a comment "CD #" and
 to modify the numbering of the tracks, starting with "#01". For Ogg/Vorbis and
 FLAC files, it also defines a DISCNUMBER tag.
+.TP
+.B \-x
+Eject the CD when all tracks have been read. See the EJECTCD configuration
+variable.
+.TP
+.B \-X [cue2discid]
+Use an alternative "cue2discid" implementation. The name of the binary must be
+exactly that. \fBabcde\fR comes with an implementation in python under the examples
+directory. The special keyword "builtin" forces the usage of the internal
+(default) implementation in shell script.
 .TP
 .B \-z
 DEBUG mode: it will rip, using \fBcdparanoia\fR, the very first second of each track

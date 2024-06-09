@@ -70,7 +70,10 @@ echo "-V     Be a bit more verbose about what is happening behind the scenes"
 echo "-x     Eject CD after all tracks are read"
 echo "-w <comment>"
 echo "       Add a comment to the CD tracks"
-echo "-W <#> Concatenate CDs: -T #01 -w \"CD #\""
+echo "-W <#[,#]>"
+echo "       Set the disc number when the CD is part of a set."
+echo "       Takes an integer disc number, optionally followed"
+echo "       by a comma and the total number of CDs in the set"
 echo "-z     Use debug CDROMREADERSYNTAX option (needs cdparanoia)"
 echo ""
 echo "Tracks is a space-delimited list of tracks to grab."
@@ -4245,10 +4248,17 @@ while getopts 1a:bBc:C:d:DefgGhj:klLmMnNo:pPQ:r:s:S:t:T:UvVxX:w:W:z opt ; do
                    fi
 		   DISCNUMBER=$( echo "$OPTARG" | cut -f1 -d',' )
 		   DISCTOTAL=$( echo "$OPTARG" | cut -f2 -d',' -s )
-		   # FIXME test that disctotal > discnumber
+		   if echo "${DISCTOTAL}" | grep "[[:digit:]]" > /dev/null 2>&1  ; then
+		   	if [ $DISCNUMBER -gt $DISCTOTAL ]; then
+		   		log error "discnumber (${DISCNUMBER}) cannot be higher than disctotal (${DISCTOTAL})"
+		   		exit 1
+		   	fi
+		   	COMMENT="CD ${DISCNUMBER}/${DISCTOTAL}"
+		   else
+		   	COMMENT="CD ${DISCNUMBER}"
+		   fi
 		   STARTTRACKNUMBER="${DISCNUMBER}$(printf "%02d" "${STARTTRACKNUMBER:-01}")"
 		   STARTTRACKNUMBERTAG="y"
-		   COMMENT="CD ${DISCNUMBER}/${DISCTOTAL}"
 		   vecho Comment is "${COMMENT}" >&2
 		   ;;
 		z) DEBUG=y ; CDROMREADERSYNTAX=debug ; EJECTCD="n" ;;

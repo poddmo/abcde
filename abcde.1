@@ -216,10 +216,12 @@ Add a comment to the tracks ripped from the CD. If you wish to use
 parentheses, these will need to be escaped. i.e. you have to write
 "\\(" instead of "(".
 .TP
-.B \-W [number]
-Concatenate CD\'s. It uses the number provided to define a comment "CD #" and
-to modify the numbering of the tracks, starting with "#01". For Ogg/Vorbis and
-FLAC files, it also defines a DISCNUMBER tag.
+.B \-W [number][,number]
+Set the disc number when the CD is part of a set.  This can optionally be
+followed by a comma and the total number of discs in the set. Discnumber is
+used to modify track numbering, eg track 1 of disc 2 will be numbered as 201. 
+These values are also used to set metadata, eg to define a comment "CD #/#". 
+For Ogg/Vorbis and FLAC files, it defines a DISCNUMBER and DISCTOTAL tag.
 .TP
 .B \-x
 Eject the CD when all tracks have been read. See the EJECTCD configuration

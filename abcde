@@ -1011,12 +1011,18 @@ do_tag ()
 			if [ -n "$DISCNUMBER" ]; then
 				echo DISCNUMBER="$DISCNUMBER"
 			fi
+			# DISCTOTAL also does not appear in any standard but is handled by Picard and MusicBee
+			if [ -n "$DISCTOTAL" ]; then
+				echo DISCTOTAL="${DISCTOTAL}"
+			fi
 			echo CDDB="${CDDBDISCID}"
+			# use extended track info for the comment
+			COMMENTOUTPUT="$(getcddbinfo TRACK-INFO)"
 			if [ -n "$(eval echo "${COMMENTOUTPUT}")" ]; then
 				case "$COMMENTOUTPUT" in
 					*=*) echo "$COMMENTOUTPUT";;
 					*)   echo COMMENT="$COMMENTOUTPUT";;
-				esac
+				esac	
 			fi
 			) | run_command "tagtrack-$OUTPUT-$1" nice $ENCNICE $METAFLAC $METAFLACOPTS \
 							${IMPORTCUESHEET:+--import-cuesheet-from="${ABCDETEMPDIR}/${CUEFILE}"} \

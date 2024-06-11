@@ -1012,6 +1012,8 @@ do_tag ()
 				echo DISCNUMBER="$DISCNUMBER"
 			fi
 			# DISCTOTAL also does not appear in any standard but is handled by Picard and MusicBee
+			# https://picard-docs.musicbrainz.org/en/appendices/tag_mapping.html
+			# https://getmusicbee.com/forum/index.php?topic=39759.msg214938
 			if [ -n "$DISCTOTAL" ]; then
 				echo DISCTOTAL="${DISCTOTAL}"
 			fi

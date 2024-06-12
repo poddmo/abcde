@@ -17,8 +17,8 @@ My ripping objective is to create lossless music tracks (flac) for listening and
     - provide option to re-list choices
 
 ## Enhancements
-- Improved the handling of album art selection. It is now possible to define a default local album art directory/file location
-- Improved handling of CD sets (-W). The option is expanded to optionally add the total number of discs in the set. The details are recorded in the metadata and there are some improvements to the workflow, eg create playlist defaults to append instead of erase when the disc number is greater than 1. (IN PROGRESS)
+- Improved handling of CD sets. The -W option is expanded to optionally add the total number of discs in the set. These details are recorded in the metadata and there are some improvements to the workflow, eg create playlist defaults to append instead of erase when the disc number is greater than 1.
+- Define a default local album art directory/file location. If the album artwork download fails or the user chooses to overide the downloaded art, abcde will look for ALBUMARTDIR/ALBUMARTFILE before asking the user to manually enter the filename.
 
 ## Todo
 - munge pattern: uppercase first letter of all filename and artist words, a la Discogs, to prevent multiple artists eg Salt n Pepa / Salt N Pepa

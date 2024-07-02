@@ -410,6 +410,84 @@ checkexec ()
 	fi
 }
 
+# abcde munge helper functions
+#
+# - munge_fs-safe: remove characters that are not broadly file-system safe or sane
+# - munge_Startcase: capitalise the first letter of every word
+# - munge_unicodetoascii: transliterate Unicode to ASCII
+# - munge_collapsewhitespace: replace multiple spaces with a single space
+
+# munge_fs-safe string
+# Convert string to be broadly file system safe and sane
+# https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
+# Remove characters that are not broadly file system safe, eg \'"()#
+munge_fs-safe ()
+{
+        local line
+        read -r line
+        # remove fs unsafe characters
+        # collapse double underscores or hyphens
+        line=$( echo "$line" | tr -d ":><|*\\\/\"'?[:cntrl:]" | \
+                sed -e 's/_[_]*/_/g' -e 's/-[-]*/-/g' )
+        # remove leading whitespace, full stops, hyphens or underscores
+        regex='^([[:space:]]|\.|-|_)'
+        while [[ $line =~ $regex ]]
+        do
+                line=$( echo "$line" | \
+                        sed -e 's/^\s*//g' -e 's/^\.*//g' -e 's/^_//g' -e 's/^-//g' )
+        done
+        # remove trailing whitespace
+        echo "$line" | sed -e 's/\s*$//g'
+}
+
+# munge_Startcase string
+# Convert the first letter of every word in string to a capital letter
+# This function helps to standardise names and was inspired by the Discogs
+# Capitalization & Grammar rules (1.2.1)
+munge_Startcase ()
+{
+        # the first character is turned uppercase
+        # each combination of space, full stop, ( or ) followed by any character is turned to uppercase
+        # each combination of hyphen followed by any character is turned to uppercase
+        # each combination of space and apostrophe followed by any character is turned to uppercase
+        # each combination of a digit followed by any character is turned to uppercase
+        local line
+        read -r line
+        echo "$line" | \
+        sed -e "s/\(^[a-z]\)/\U\1/g" \
+            -e "s/\([\ \.\(\)][a-z]\)/\U\1/g" \
+            -e "s/\(\-[a-z]\)/\U\1/g" \
+            -e "s/\( '[a-z]\)/\U\1/g" \
+            -e "s/\([0-9][a-z]\)/\U\1/g"
+}
+
+# munge_unicodetoascii string
+# Convert (tranliterate) Unicode to ASCII
+munge_unicodetoascii  ()
+{
+        local line
+        read -r line
+        if [ ! -x $ANYASCIIBIN ];
+        then
+                echo "$line"
+        else
+                echo "$line" | $ANYASCIIBIN
+        fi
+}
+
+# munge_collapsewhitespace string
+# Collapse any whitespace down to a single space.
+munge_collapsewhitespace ()
+{
+        local line
+        read -r line
+        # convert any whitespace to space
+        # collapse contiguous space to single space
+        echo "$line" | \
+                sed -e 's/\s/ /g' \
+                    -e 's/ [ ]*/ /g'
+}
+
 # diffentries <filename> <max_value> <entry1>,<entry2>
 # max_value: the range of entries goes from 1 to <max_value>
 diffentries ()
@@ -3989,6 +4067,7 @@ GLYRC=glyrc
 IDENTIFY=identify
 CONVERT=convert
 DISPLAYCMD=display
+ANYASCIIBIN=anyascii
 
 # Options for programs called from abcde:
 #

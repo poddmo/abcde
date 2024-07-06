@@ -556,6 +556,11 @@ playlists, etc.
 If set, the resulting playlist will have CR-LF line endings, needed by some
 hardware-based players.
 .TP
+.B STARTCASEFLACTAGS
+If set to y, artist name, album title and track title FLAC tags will be
+piped through the munge_Startcase function so all words begin with a capital
+letter.
+.TP
 .B COMMENT
 Specifies a comment to embed in the ID3 or Ogg comment field of each
 finished track. Can be up to 28 characters long. Supports the same
@@ -585,6 +590,21 @@ control of track name, artist name and album name for the ultra-fastidious.
 mungegenre () is a shell function used to modify the $GENRE variable. As
 a default action, it takes $GENRE as $1 and outputs the resulting value
 to stdout converting all UPPERCASE characters to lowercase.
+.TP
+.B munge_fs-safe
+munge helper function to remove characters that are not file-system safe or sane
+for Windows or Linux.
+.TP
+.B munge_Startcase
+munge helper function to capitalise the first letter of every word. This
+helps to prevent duplicate artists and albums.
+.TP
+.B munge_unicodetoascii
+munge helper function to transliterate Unicode to ASCII. This is useful for
+filename compatibility and accessibility.
+.TP
+.B munge_collapsewhitespace
+munge helper function to replace multiple spaces with a single space
 .TP
 .B pre_read
 pre_read () is a shell function which is executed before the CDROM is read

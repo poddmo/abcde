@@ -1,0 +1,314 @@
+ABCDE
+=====
+
+abcde is a frontend command-line utility (actually, a shell script) that
+grabs tracks off a CD or a singletrack flac file with an embedded cuesheet,
+encodes them to Ogg/Vorbis, MP3, FLAC, Ogg/Speex, M4A, Opus, WavPack,
+Monkey's Audio (ape), MPP/MP+(Musepack) and/or AIFF format, and tags
+them, all in one go.
+
+Your finished Ogg/MP3/FLAC/Speex/M4A/Opus,WavPack/Ape/MPP/AIFF's are, by default,
+stored in a subdirectory of the current directory (named after the artist)
+with a filename based on the track title. Spaces are replaced by underscores,
+and apostrophes and control codes are filtered out. Colons are replaced with
+an underscore and a hyphen. The end result usually looks like:
+Our_Lady_Peace/01.Supermans_Dead.ogg. This filename munging is customizable,
+edit the mungefilename function in your abcde.conf to change it.
+
+abcde also has the ability to search for and download suitable album art as
+well as automatically embed the album art into the tracks of some containers.
+
+Many of the questions related of problems executing abcde have been moved to the
+FAQ, which should be distributed along with this package. Refer to that file
+for more help.
+
+MAJOR CHANGES
+=============
+
+(see changelog for more details)
+
+Changes in 2.10-RC1
+* ...
+
+Changes in 2.9.4
+* ...
+
+Changes in 2.9.3
+* Small bug fixes
+
+Changes in 2.9.2
+* More fixes to Musicbrainz code
+
+Changes in 2.9.1
+* Fixes in Musicbrainz code
+
+Changes in 2.9
+* Allow for embedding of album art downloaded by the getalbumart fuction
+* Add support for another output encoding: Audio Interchange File Format (AIFF)
+* Reworked CD lookup code to fully support using all of CDDB,
+  Musicbrainz and CD-Text
+* Correct Musicbrainz ID calculation for discs where PREGAP is non-zero
+* Add initial Irix support
+* Musicbrainz support now depends on WebService::MusicBrainz 1.x to
+  support the v2 MusicBrainz web API
+* Major refactoring and shell quoting fixes
+* Many other bug fixes - see the changelog for a full list
+
+Changes in 2.8.1
+* Fix for stupid bug introduced in abcde-musicbrainz-tool in 2.8
+
+Changes in 2.8
+* Add support for using multiple CD lookup services in order
+* Switch from cddb to musicbrainz as the default CD lookup service
+* Lots more bugs fixes - see the changes for more details.
+
+Changes in 2.7.2
+* Support for output to the Matroska container (mka).
+* Add id3tag mp3 tagger as this is the tagger available to
+  OpenBSD users. 
+* Several bug fixes. See the changelog for more details.
+
+Changes in 2.7.1
+* Rewrite and improvement of the abcde Makefile.
+* Support added for True Audio encoding.
+* Support added for encoding to MPEG-1 Audio Layer II (mp2) with either
+  twolame or FFmpeg.
+* Support added for encoding to WavPack with FFmpeg.
+* Support added for encoding to m4a with either FFmpeg or avconv. This
+  allows usage of the FFmpeg / avconv native alac encoder.
+* Support added for AAC encoding with fhgaacenc via Wine.
+* Support added for AAC encoding with qaac via Wine. (Also alac encoding
+  with the open source refalac).
+* Several bug fixes. See the changelog for more details.
+
+Changes in 2.7
+* Rewrite of the mungefilename function.
+* Support added for downloading album art.
+* Support added for ripping with libcdio (cd-paranoia).
+* Some error checking and a small help file added to abcde-musicbrainz-tool. 
+* Substantial renovations of m4a encoding with a choice now between encoding
+  with faac, NeroAacEnc and fdkaac.
+* Fixes to USEPIPES with the addition of several new encoders and rippers.
+  Details on USEPIPES now available in the abcde FAQ doc.
+* Support added for encoding with Monkey's Audio (ape), tagging is with
+  Robert Muth's apetag.
+* Support added for encoding with WavPack.
+* mp3 tagging renovated with version sniffing differentiating between eyeD3
+  versions. Tagging formalised with options now for id3, id3v2 and eyeD3.
+* Many, many bug fixes. See the changelog for more details.
+
+Changes in 2.6:
+* Lots of bugfixes
+
+Changes in 2.5:
+* Added working support for Musicbrainz using a perl helper script.
+
+Changes in 2.4:
+* Read TOC entries from the CD. The default uses cdrdao. The program mkcue is
+  also optional.
+* Possibility to use CDDBCHOICE1,CDDBCHOICE2 (i.e., 1,3) to get a diff of two
+  parsed CDDB entries.
+* Added SHOWCDDBFIELDS to define whether to show the YEAR and GENRE fields from
+  the CDDB output.
+* Added the possibility of embeding a cuesheet on a singletrack flac file. A
+  single BACKUP flag is most likely needed to use all the needed flags:
+  "abcde -1 -o flac -a default,cue"
+* Added the possibility of using a singletrack flac file with an embedded
+  cuesheet as a source to extract tracks from (use -X to specify an external
+  CUE2DISCID implementation; check under examples in the distributed source
+  code or package).
+* Added replaygain for Ogg/Vorbis and Ogg/FLAC.
+* Added M4A encoding.
+* Uses the default found $CDROMREADER instead of forcing cdparanoia when
+  cdda2wav is installed.
+* BATCH mode has been split into two options: BATCHNORM and NOGAP.
+* Added -U option for non-UNICODE (non UTF-8) tag encoding.
+* Added -z for debug.
+* Added -f to force the removal of left files.
+* CUE support has changed from a flag (-M) to an action (cue).
+
+Changes in 2.3:
+* Support for mkcue, to create a CUE sheet of the CD structure. It can be used
+  with "-1" to create a backup, so that later the original CD can be recreated.
+* New -o <output(1)>:<options(1)>,... way of passing specific options to an
+  output. Now we can pass specific options without having to modify a config
+  file. This feature was already present in the last versions of the 2.2 cycle.
+* Unix PIPEs, as a second way to encode files with a low disc space.
+* Option to erase the "encoded" entries from the status file. Allows one to
+  encode the wav files (in case they were not erased) into another format. This
+  is needed until status information is stored for each format.
+* The "ogg" output mode will be substituted for "vorbis" in the near future.
+  This release adds a compatibility layer so that both entries work.
+* The FLAC encoder forces the files to be overwritten, in case they previously
+  exists. This avoids a half-through abcde run to continue without errors in
+  case it was cancelled during the FLAC encoding.
+* Added a post_read() function so that we can do things with the CD before we
+  eject it.
+
+Changes in 2.2:
+
+* Support for MPP/MP+(Musepack) format. It can be downloaded from
+  corecodecs.org. It is supposed to be Free (not only free), and released under
+  the GPL...
+* New "-t <number>" option for starting the numbering of the output files at a
+  given starting number. Ideal for albums with more than one CD.
+* New "-T <number>" option, similar to "-t" but also modifies the tag entries
+  on the files themselves.
+* New "-w <COMMENT>" to add a comment to the tracks of a given CD rip. Use
+  quotes.
+* New "-W <number>" option to combine both a comment with "CD #number" and a
+  starting number for both the tracks and the tags with "#01" (that is, 101 for
+  the 1st CD, 201 for the second...)
+* Support for keeping an existing playlist (and not add new entries to it),
+  erase the existing one (overwrite) or append new entries to the existing
+  one.
+* Under ./examples you will find a very basic way to make abcde run in the
+  background and start a non-interactive rip of a CD, if it can find an
+  audio CD in the tray.
+  The abcded script depends on eject and cdparanoia being installed in your
+  system.
+* New mungegenre function to switch off (or modify) the default behaviour of
+  transforming uppercase characters to lowercase.
+* cdparanoia permits performing a query to the CD drive and obtain a list of
+  valid audio tracks. So, now we perform such query and process the results.
+* Support for "None of the above" has been added with the "0" selection. A
+  template is created, and the selection to edit it is defaulted to "y".
+
+New options in 2.1.19:
+
+* ONETRACK mode has been introduced. Setting the flag "-1" will create a
+  single file with all the tracks from the CD.
+
+Changes in 2.1.18:
+
+* CDSPEED option defaults to eject. However, since cdparanoia has a built-in
+  option to set the speed, we use it. There is not way (right now) to force the
+  use of eject, but it will be introduced in a future release. Also one can use
+  the pre_read function to set the speed with other program.
+
+New options in 2.1.16:
+
+* -S, CDSPEED and CDSPEEDOPTS for setting the speed of the CDROM. One can set
+  the options in abcde.conf and pass the value on the command line.  This option
+  can be used with "eject -x <speed>", "setcd -x <speed>" or the built-in
+  cdparanoia option "-S <speed>", if the CD reader supports it.
+* Added a pre-read function. Modify it at your pleasure in abcde.conf
+  One can use it to close the CD drive.
+* -m option, to modify the playlist to include CRLF in every line. Some players
+  insist on having those to work properly with playlists.
+
+New options in 2.1.15:
+
+* -V can be used to obtain some more information about the CDDB queries.
+* -v shows the version, basic help, and exits.
+
+New options from 2.1.10 to 2.1.13:
+
+* CDROMID has been introduced for cdda2wav use with SCSI devices.
+* Use -L to retrieve the CDDB entries from a local repository (also one can
+  set CDDBUSELOCAL in the config file).
+* If CDDBCOPYLOCAL is set to "y" we store copies of the CDDB entries, under
+  CDDBLOCALDIR (defaults to "~/.cddb).
+
+Modifications from 2.1.9 to 2.1.10:
+
+* Initial (still incomplete) MacOSX support is on the works.
+* A new tool (curl) has been added for MacOSX compatibility, as HTTPGET
+  option.
+
+Options modified from 2.1.8 to 2.1.9:
+
+* KEEPWAVS option now sets the clean to "no".
+
+Options added/modified from 2.1.3 to 2.1.5:
+
+* Ogg/Speex added. Use "-o spx" to rip your audiobooks, for instance.
+
+Options added/modified from 2.1.1 to 2.1.3:
+
+* WGET has been substituted by HTTPGET. Now we support fetch as retrieval
+  program.
+* KEEPWAVS has been introduced. Set it to "y" and the wav tracks will be
+  kept.
+* CDDBPROTO is used to specify the protocol level in the CDDB retrieval.
+* DAGRAB has been introduced as a cd ripper.
+
+Options added/modified from 2.0.3 to 2.1.x:
+
+* -b use batch processing. It uses normalize-audio to adjust the volume of
+  the songs, and a -g gapless option from lame to remove gaps. Only available
+  for mp3+lame combination.
+* a new "normalize" option has been added to -a, to normalize the volume.
+* -o works now with a combination of the different outputs: ogg, mp3, flac.
+  Combine them separated by ",". Example: "-o ogg,flac".
+* OUTPUTTYPE is no longer used for the output file type. From version 2.1 abcde
+  implements multiple-output and the file type is always appended at the end of
+  the file. The OUTPUT variable can be used in the PLAYLISTFORMAT and
+  OUTPUTFORMAT to create different directory structures and playlist names for
+  each of the output formats selected.
+
+* DYEAR can be used as DiskYear value in CDDB data. If the data is not supplied
+  by the CDDB server, it can be added.
+
+Other options that changed from 1.x to 2.x:
+
+* -e doesn't exist anymore, abcde now presents you with all of the cddb data
+  and asks you if you want to edit it. If you don't want to be asked,
+  use -N or INTERACTIVE=n
+* The output type defaults to Ogg/Vorbis. Specify -o mp3 or OUTPUTTYPE=mp3
+  if you still want to output mp3's.
+* -l 2 is now just -l, LOWDISK=2 should now be LOWDISK=y
+* -V and -v are gone, abcde will now prompt you if you'd like to use Various
+  Artists handling, after showing you the cddb data.
+* -P is now '-a playlist,clean', PLAYLISTONLY=y is now
+  ACTIONS=playlist,clean
+* -p is now '-a playlist,move,clean', PLAYLIST=y is now
+  ACTIONS=playlist,move,clean
+* cddb-tool has been cleaned up a little bit. 'get' is now 'query' and
+  'read', and the tempfile handling has been removed.
+* ID3COMMENT is now COMMENT.
+* FreeDB is now the default CDDB database.
+
+
+REQUIREMENTS
+============
+
+abcde requires the following backend tools to work:
+
+* An Ogg/Vorbis encoder (oggenc, the default, or vorbize) or:
+* An MP3 encoder (lame, gogo, bladeenc, l3enc, etc) or:
+* A FLAC encoder (flac) or:
+* An Ogg/Speex encoder (speexenc) or:
+* An MPP/MP+(Musepack) encoder (mpcenc) or:
+* An AAC encoder (faac, NeroAacEnc, fdkaac) or:
+* An Opus encoder )opusenc) or:
+* A Monkey's Ausio encoder (mac) or:
+* A WavPack encoder (wavpack)
+* normalize-audio for volume normalization.
+* CD Paranoia, an audio CD reading utility or:
+* icedax/cdda2wav, the audio CD reading utility cdparanoia was born from or:
+* cd-paranoia, an audio cd reading utility, courtesy of GNU libcdio or:
+* dagrab, another audio CD reading utility.
+* cd-discid, a CDDB DiscID reading program. Formerly bundled with abcde.
+  It's available in Debian or http://linukz.org/cd-discid.shtml
+* An HTTP retrieval program: wget, fetch (FreeBSD) or curl (MacOSX)
+* id3, an id3 tagging program. Available at: http://lly.org/~rcw/id3/
+* eyeD3, an id3 version 2.0 tagger. http://eyed3.nicfit.net/
+* (optional) distmp3, a client/server for distributed mp3 encoding.
+  You can get distmp3 at http://wlug.westbo.se/medlprog/medlprog.html
+
+Abcde's mailing list is abcde-users@lists.einval.com. Visit
+
+  https://lists.einval.com/cgi-bin/mailman/listinfo/abcde-users
+
+to subscribe. Posts from non-subscribers are moderated to prevent
+spam.
+
+Abcde's current page is at https://abcde.einval.com/ and the latest
+upstream code is in git at https://git.einval.com/cgi-bin/gitweb.cgi?p=abcde.git
+
+--
+Steve McIntyre <93sam@debian.org>
+Andrew Strong <andrew.david.strong@gmail.com>
+
+abcde was originally created by Robert Woodcock <rcw@debian.org>

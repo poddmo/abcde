@@ -2261,6 +2261,7 @@ do_discid ()
 		CDDBDISCID=$(echo "$CDDBTRACKINFO" | cut -f1 -d' ')
 	else
 		CDDBTRACKINFO=$(cat "$WAVOUTPUTDIR/abcde.${CDDBDISCID}/cddbdiscid")
+		MBTRACKINFO=$(cat "${WAVOUTPUTDIR}/abcde.${CDDBDISCID}/mbdiscid")
 	fi
 
 	# Get a full enumeration of tracks, sort it, and put it in the TRACKQUEUE.

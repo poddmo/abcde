@@ -1,5 +1,11 @@
 abcde 2.10.1-DEV1
 
+ * Set FLAC ALBUMARTIST metadata tag for Various Artist releases
+
+ -- poddmo <https://github.com/poddmo/abcde> Sat 24 Aug 2024 17:00:00
+
+abcde 2.10-RC1
+
  * Bug fixes applied from https://abcde.einval.com/bugzilla
  * Bug fixes applied from the mailing list
  * New features:
@@ -8,6 +14,7 @@ abcde 2.10.1-DEV1
   + define munge helper functions
   + cddb choice input now has a help and re-list function and shows
     year of release
+  + munge functions and examples
 
  -- poddmo <https://github.com/poddmo/abcde> Sun 07 Jul 2024 13:12:54
 

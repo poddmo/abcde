@@ -28,9 +28,7 @@ MAJOR CHANGES
 (see changelog for more details)
 
 Changes in 2.10.1-DEV1
-* Set FLAC ALBUMARTIST metadata tag for Various Artist releases
-* New munge function, munge_simplify_punctuation, to help standardise
-  unicode and ascii punctuation like apostrophe's and ellipsis
+* Set FLAC ALBUMARTIST metadata tag for multi-artist CDs
 
 Changes in 2.10-RC1
 * cddb choices show the year of release

@@ -561,6 +561,14 @@ If set to y, artist name, album title and track title FLAC tags will be
 piped through the munge_Startcase function so all words begin with a capital
 letter.
 .TP
+.B FLACTAGALBUMARTISTTAGNAME
+There is no standard for the ALBUM ARTIST tag name or value so these are
+configurable. This tag is only set for multi-artist CDs. Defaults to
+ALBUMARTIST.
+.TP
+.B FLACTAGALBUMARTISTVALUE
+Defaults to 'Various Artists'
+.TP
 .B COMMENT
 Specifies a comment to embed in the ID3 or Ogg comment field of each
 finished track. Can be up to 28 characters long. Supports the same

@@ -916,7 +916,7 @@ return 0
 # id3 tags a filename
 # variables used:
 # TRACKS, TRACKNAME, TRACKARTIST, TAGGER, TAGGEROPTS, VORBISCOMMENT, METAFLAC,
-# COMMENT, DALBUM, DARTIST, CDYEAR, CDGENRE
+# COMMENT, DALBUM, DARTIST, CDYEAR, CDGENRE, VARIOUSARTISTS
 do_tag ()
 {
 	COMMENTOUTPUT="$(eval echo "${COMMENT}")"
@@ -1079,6 +1079,9 @@ do_tag ()
 				echo ARTIST="$TRACKARTIST"
 				echo ALBUM="$DALBUM"
 				echo TITLE="$TRACKNAME"
+			fi
+			if [ "$VARIOUSARTISTS" = "y" ]; then
+				echo "$FLACTAGALBUMARTISTTAGNAME"="$FLACTAGALBUMARTISTVALUE"
 			fi
 			if [ -n "$CDYEAR" ]; then
 				echo DATE="$CDYEAR"
@@ -3981,6 +3984,8 @@ NOGAP=n
 BATCHNORM=n
 NOCDDBQUERY=n
 FLACTAGSTARTCASE=n
+FLACTAGALBUMARTISTTAGNAME="ALBUMARTIST"
+FLACTAGALBUMARTISTVALUE="Various Artists"
 
 # If using scsi devices, cdda2wav/icedax needs a CDROMID, instead of a device node
 # i.e. CDROMID="1,0,0"

@@ -28,10 +28,33 @@ MAJOR CHANGES
 (see changelog for more details)
 
 Changes in 2.10.1-DEV1
-* ...
+* Set FLAC ALBUMARTIST metadata tag for Various Artist releases
+* New munge function, munge_simplify_punctuation, to help standardise
+  unicode and ascii punctuation like apostrophe's and ellipsis
 
 Changes in 2.10-RC1
-* Many bug fixes and new features. See changelog for more details
+* cddb choices show the year of release
+* cddb choice has a help and re-list option. The help also has details
+  about how to diff two releases
+* Improved handling of CD sets:
+  * The -W option is expanded to optionally also take the total number
+    of discs in the set. That number is used for a DISCTOTAL FLAC tag
+  * If DISCNUMBER is greater than 1, default to append playlist rather
+    than erase
+* Define a local file and directory for album art. If the album artwork
+  download fails or the user chooses to overide the downloaded art, abcde
+  will look for ALBUMARTDIR/ALBUMARTFILE before asking the user to manually
+  enter the filename.
+* Created munge helper functions:
+  * munge_fs-safe: remove characters that are not Windows and Linux
+    file-system safe or sane
+  * munge_Startcase: capitalise the first letter of every word
+  * munge_unicodetoascii: transliterate Unicode to ASCII
+  * munge_collapsewhitespace: replace multiple spaces with a single space
+  * Add new mungefilename config example to use munge helper functions
+  * Create new config option STARTCASEFLACTAGS to use munge_Startcase for
+    FLAC tags artist name, album title and track titles. This helps to 
+    prevent artist duplication due to inconsistent capitalisation
 
 Changes in 2.9.4
 * ...

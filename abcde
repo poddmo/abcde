@@ -1071,7 +1071,7 @@ do_tag ()
 			;;
 		flac)
 			(
-			if [ "$STARTCASEFLACTAGS" = "y" ]; then
+			if [ "$FLACTAGSTARTCASE" = "y" ]; then
 				echo ARTIST="$( echo $TRACKARTIST | munge_Startcase )"
 				echo ALBUM="$( echo $DALBUM | munge_Startcase )"
 				echo TITLE="$( echo $TRACKNAME | munge_Startcase )"
@@ -3980,7 +3980,7 @@ PADTRACKS=n
 NOGAP=n
 BATCHNORM=n
 NOCDDBQUERY=n
-STARTCASEFLACTAGS=n
+FLACTAGSTARTCASE=n
 
 # If using scsi devices, cdda2wav/icedax needs a CDROMID, instead of a device node
 # i.e. CDROMID="1,0,0"

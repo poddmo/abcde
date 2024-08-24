@@ -52,7 +52,7 @@ Changes in 2.10-RC1
   * munge_unicodetoascii: transliterate Unicode to ASCII
   * munge_collapsewhitespace: replace multiple spaces with a single space
   * Add new mungefilename config example to use munge helper functions
-  * Create new config option STARTCASEFLACTAGS to use munge_Startcase for
+  * Create new config option FLACTAGSTARTCASE to use munge_Startcase for
     FLAC tags artist name, album title and track titles. This helps to 
     prevent artist duplication due to inconsistent capitalisation
 

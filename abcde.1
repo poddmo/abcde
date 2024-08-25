@@ -1,4 +1,4 @@
-.TH abcde 1 "19 August 2024" "abcde 2.10.1-DEV1"
+.TH abcde 1 "25 August 2024" "abcde 2.10.1-DEV1"
 .SH NAME
 abcde \- Grab an entire CD and compress it to Ogg/Vorbis, MP3, FLAC, Ogg/Speex, AAC, 
 WavPack, Monkey's Audio (ape), MPP/MP+(Musepack), True Audio (tta), MP2 format
@@ -578,6 +578,11 @@ syntax as OUTPUTFORMAT. Does not currently support ID3v2.
 Specifies a comma-delimited list of systems to use for remote encoding using
 \fBdistmp3\fR. Equivalent to \-r.
 .TP
+.B SIMPLIFYPUNCTUATION
+If set to y, the munge_simplify_punctuation function is enabled. You must
+also choose y at the 'Edit selected CDDB data' prompt to have the function
+applied, otherwise the original CDDB data will be used.
+.TP
 .B mungefilename
 mungefilename() is an \fBabcde\fR shell function that can be overridden via
 \fIabcde.conf\fR. It takes CDDB data as $1 and outputs the resulting filename on
@@ -613,6 +618,9 @@ filename compatibility and accessibility.
 .TP
 .B munge_collapsewhitespace
 munge helper function to replace multiple spaces with a single space
+.TP
+.B munge_simplify_punctuation
+Convert specific unicode punctuation to ascii.
 .TP
 .B pre_read
 pre_read () is a shell function which is executed before the CDROM is read

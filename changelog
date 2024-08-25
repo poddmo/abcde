@@ -1,8 +1,11 @@
 abcde 2.10.1-DEV1
 
- * Set FLAC ALBUMARTIST metadata tag for Various Artist releases
+ * New features:
+  + Set FLAC ALBUMARTIST metadata tag for Various Artist releases
+  + New munge helper function: munge_simplify_punctuation, to help standardise
+    unicode and ascii punctuation like apostrophe's and ellipsis.
 
- -- poddmo <https://github.com/poddmo/abcde> Sat 24 Aug 2024 17:00:00
+ -- poddmo <https://github.com/poddmo/abcde> Sun 25 Aug 2024 18:00:00
 
 abcde 2.10-RC1
 

@@ -13,15 +13,19 @@ My ripping objective is to create lossless music tracks (flac) for listening and
     - provide option to re-list choices
 
 ## Enhancements
-- Improved handling of CD sets. The -W option is expanded to optionally add the total number of discs in the set. These details are recorded in the metadata and there are some improvements to the workflow, eg create playlist defaults to append instead of erase when the disc number is greater than 1.
+- Improved handling of CD sets:
+  - The -W option is expanded to optionally add the total number of discs in the set. These details are recorded in the FLAC metadata tags DISCNUMBER and DISCTOTAL
+  - Create playlist defaults to append instead of erase when the disc number is greater than 1
+- Set the FLAC ALBUMARTIST="Various Artists" metadata tag for multi-artist CDs
 - Define a default local album art directory/file location. If the album artwork download fails or the user chooses to overide the downloaded art, abcde will look for ALBUMARTDIR/ALBUMARTFILE before asking the user to manually enter the filename.
 - Created munge helper functions:
   - munge_fs-safe: remove characters that are not Windows and Linux file-system safe or sane
   - munge_Startcase: capitalise the first letter of every word
   - munge_unicodetoascii: transliterate Unicode to ASCII
   - munge_collapsewhitespace: replace multiple spaces with a single space
+  - munge_simplify_punctuation: helper function to standardise unicode and ascii punctuation like apostrophe's and ellipsis
 - Add new mungefilename config example to use munge helper functions
-- Create new config option STARTCASEFLACTAGS to use munge_Startcase for FLAC tags artist name, album title and track titles
+- Create new config option FLACTAGSTARTCASE to use munge_Startcase for FLAC tags artist name, album title and track titles
   - This helps to prevent artist duplication due to inconsistent capitalisation
 
 ## Todo
@@ -29,21 +33,24 @@ My ripping objective is to create lossless music tracks (flac) for listening and
 - archive metadata action
 - highlight CDDB entries with extended info and provide a way to view it
 - create a completion report a la rubyrip that shows if any tracks have read errors
-- STARTCASEFLACTAGS should probably apply globally to tags and names, eg STARTCASENAMES
+- FLACTAGSTARTCASE and SIMPLIFYPUNCTUATION should probably apply globally to tags and names
 
 # Known issues
 - tested only with flac encoding
-- one-track flacs: embedded cue sheet does not include track titles
+- one-track flacs: embedded cue sheet does not include track titles (pre-existing issue)
 - not patched or tested for genre issues
-- unicode characters are not displayed
 
 # Testing
 - OS: Ubuntu 22.04.4
 - Hardware: x64 with two SATA CDROMs
-## Command line
+## Example Command lines
 ```
 abcde -V -G -o flac -d /dev/sr0
+abcde -V -G -o flac -d /dev/sr0 -W 1,2
+abcde -V -o flac -d /dev/sr1 -W 2,2
 ```
+Verbose rip (-V), download albumart (-G), output to FLAC (-o flac), CD is part of a set (-W 1,2). I only try to download albumart for the first disc in a set.
+
 ## Config file
 This is my $HOME/.abcde.conf
 ```
@@ -70,6 +77,9 @@ HELLOINFO="music@hostname"
 FLACENCODERSYNTAX=flac
 FLAC=flac
 FLACOPTS='-s -e -V -8'
+FLACTAGSTARTCASE=y
+FLACTAGALBUMARTISTTAGNAME="ALBUMARTIST"
+FLACTAGALBUMARTISTVALUE="Various Artists"
 OUTPUTTYPE="flac"
 CDROMREADERSYNTAX=cdparanoia
 CDPARANOIA=cdparanoia
@@ -84,7 +94,14 @@ VAONETRACKOUTPUTFORMAT='${OUTPUT}/Various-${ALBUMFILE}/${ALBUMFILE}'
 PLAYLISTFORMAT='${ARTISTFILE}/${ALBUMFILE}/${ARTISTFILE} - ${ALBUMFILE}.m3u'
 VAPLAYLISTFORMAT='Various-${ALBUMFILE}/${ALBUMFILE}.m3u'
 DOSPLAYLIST=y
-STARTCASEFLACTAGS=y
+SIMPLIFYPUNCTUATION="y"
+munge_simplify_punctuation ()
+{
+        # list of targeted punctuation:
+        # RIGHT SINGLE QUOTATION MARK, HORIZONTAL ELLIPSIS
+        sed -e "s/\xE2\x80\x99/\'/g" \
+            -e "s/\xe2\x80\xa6/.../g"
+}
 mungefilename ()
 {
         echo "$@" | \

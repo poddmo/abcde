@@ -27,7 +27,7 @@ MAJOR CHANGES
 
 (see changelog for more details)
 
-Changes in 2.10.1-DEV1
+Changes in 2.10.1-RC1
 * Set FLAC ALBUMARTIST metadata tag for multi-artist CDs
 * New munge helper function: munge_simplify_punctuation, to help standardise
   unicode and ascii punctuation like apostrophe's and ellipsis.

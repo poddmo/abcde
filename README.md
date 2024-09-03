@@ -29,6 +29,7 @@ My ripping objective is to create lossless music tracks (flac) for listening and
   - This helps to prevent artist duplication due to inconsistent capitalisation
 
 ## Todo
+- make the CDDB entry choice prompt for locally cached (line ~2618) the same as in do_cddbedit (line ~3031)
 - quit immediately and exit cleanly options
 - archive metadata action
 - highlight CDDB entries with extended info and provide a way to view it

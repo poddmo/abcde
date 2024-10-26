@@ -3363,7 +3363,7 @@ do_getalbumart()
 				if [ -s "${ABCDETEMPDIR}/mbid.$(checkstatus cddb-choice)" ]; then
 					MBID=$(cat "${ABCDETEMPDIR}/mbid.$(checkstatus cddb-choice)")
 					vecho "trying to get cover from coverartarchive.org with musicbrainz mbid $MBID" >&2
-					ALBUMARTURL="http://coverartarchive.org/release/$MBID/front"
+					ALBUMARTURL="https://coverartarchive.org/release/$MBID/front"
 					vecho "cover URL: $ALBUMARTURL" >&2
 					$HTTPGET "$ALBUMARTURL" > "${ABCDETEMPDIR}/$ALBUMARTFILE"
 					if [ $? -ne 0 ]; then

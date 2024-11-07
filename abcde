@@ -906,7 +906,7 @@ do_getgenreid () {
 		"jpop")                  id=146 ;;
 		"synthpop")              id=147 ;;
 		"rock/pop"|"rock / pop") id=148 ;;
-		*)                       id=255 ;;
+		*)                       id=12  ;;
 	esac
 echo ${id}
 return 0

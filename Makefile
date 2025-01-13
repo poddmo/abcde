@@ -20,7 +20,7 @@ install:
 	$(INSTALL) -d -m 755 $(DESTDIR)$(sysconfdir)
 	$(INSTALL) -m 644 abcde.conf $(DESTDIR)$(sysconfdir)
 	$(INSTALL) -d -m 755 $(DESTDIR)$(docdir)
-	$(INSTALL) -m 644 changelog COPYING FAQ README $(DESTDIR)$(docdir)
+	$(INSTALL) -m 644 changelog README $(DESTDIR)$(docdir)
 	$(INSTALL) -d -m 755 $(DESTDIR)$(mandir)/man1
 	$(INSTALL) -m 644 abcde.1 cddb-tool.1 $(DESTDIR)$(mandir)/man1
 

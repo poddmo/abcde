@@ -29,14 +29,18 @@ My ripping objective is to create lossless music tracks (flac) for listening and
   - This helps to prevent artist duplication due to inconsistent capitalisation
 
 ## Todo
+- escape bash characters in extended info
+- improve the diff display: show cddb entry number in the header
+- highlight CDDB entries with extended info and provide a way to view it
+- differentiate EXTD and EXTT: EXTD should appear on all tracks
 - make the CDDB entry choice prompt for locally cached (line ~2618) the same as in do_cddbedit (line ~3031)
 - quit immediately and exit cleanly options
 - archive metadata action
-- highlight CDDB entries with extended info and provide a way to view it
 - create a completion report a la rubyrip that shows if any tracks have read errors
 - FLACTAGSTARTCASE and SIMPLIFYPUNCTUATION should probably apply globally to tags and names
 
 # Known issues
+- extended info with bash escape characters cause errors during tagging
 - tested only with flac encoding
 - one-track flacs: embedded cue sheet does not include track titles (pre-existing issue)
 - not patched or tested for genre issues

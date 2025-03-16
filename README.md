@@ -16,6 +16,7 @@ My ripping objective is to create lossless music tracks (flac) for listening and
 - Improved handling of CD sets:
   - The -W option is expanded to optionally add the total number of discs in the set. These details are recorded in the FLAC metadata tags DISCNUMBER and DISCTOTAL
   - Create playlist defaults to append instead of erase when the disc number is greater than 1
+- Improved handling of metadata: CDDB extended info (EXT*) are added passed through to FLAC tags
 - Set the FLAC ALBUMARTIST="Various Artists" metadata tag for multi-artist CDs
 - Define a default local album art directory/file location. If the album artwork download fails or the user chooses to overide the downloaded art, abcde will look for ALBUMARTDIR/ALBUMARTFILE before asking the user to manually enter the filename.
 - Created munge helper functions:
@@ -29,10 +30,8 @@ My ripping objective is to create lossless music tracks (flac) for listening and
   - This helps to prevent artist duplication due to inconsistent capitalisation
 
 ## Todo
-- escape bash characters in extended info
 - improve the diff display: show cddb entry number in the header
 - highlight CDDB entries with extended info and provide a way to view it
-- differentiate EXTD and EXTT: EXTD should appear on all tracks
 - make the CDDB entry choice prompt for locally cached (line ~2618) the same as in do_cddbedit (line ~3031)
 - quit immediately and exit cleanly options
 - archive metadata action
@@ -40,7 +39,6 @@ My ripping objective is to create lossless music tracks (flac) for listening and
 - FLACTAGSTARTCASE and SIMPLIFYPUNCTUATION should probably apply globally to tags and names
 
 # Known issues
-- extended info with bash escape characters cause errors during tagging
 - tested only with flac encoding
 - one-track flacs: embedded cue sheet does not include track titles (pre-existing issue)
 - not patched or tested for genre issues

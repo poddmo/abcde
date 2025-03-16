@@ -476,7 +476,8 @@ munge_unicodetoascii  ()
 }
 
 # munge_collapsewhitespace string
-# Collapse any whitespace down to a single space.
+# Collapse any whitespace down to a single space
+# Remove leading and trailing space
 munge_collapsewhitespace ()
 {
         local line
@@ -485,7 +486,9 @@ munge_collapsewhitespace ()
         # collapse contiguous space to single space
         echo "$line" | \
                 sed -e 's/\s/ /g' \
-                    -e 's/ [ ]*/ /g'
+                    -e 's/ [ ]*/ /g' \
+                    -e 's/^\s*//g' \
+                    -e 's/\s*$//g'
 }
 
 # diffentries <filename> <max_value> <entry1>,<entry2>
@@ -533,7 +536,10 @@ getcddbinfo()
 		TRACKNAME="$(grep -a "^TTITLE$CDDBTRACKNUM=" "$CDDBDATA" | cut -f2- -d= | tr -d \[:cntrl:\] | sed 's/\ \+$//')"
 		;;
 	TRACK-INFO)
-		grep -a "^EXTT$CDDBTRACKNUM=" "$CDDBDATA" | cut -f2- -d= | tr -d \[:cntrl:\] | sed 's/\\n/\n/g'
+		grep -a "^EXTT$CDDBTRACKNUM=" "$CDDBDATA" | cut -f2- -d= | tr -d \[:cntrl:\] | sed 's/\\n/\;\ /g'
+		;;
+	DISC-INFO)
+		grep EXTD $CDDBDATA | cut -f2- -d= | tr -d \[:cntrl:\] | sed 's/\\n/\;\ /g'
 		;;
 	esac
 }
@@ -919,7 +925,7 @@ return 0
 # COMMENT, DALBUM, DARTIST, CDYEAR, CDGENRE, VARIOUSARTISTS
 do_tag ()
 {
-	COMMENTOUTPUT="$(eval echo "${COMMENT}")"
+	COMMENTOUTPUT="$(eval echo '${COMMENT}')"
 	if [ -z "$COMMENTOUTPUT" ]; then
 		COMMENTOUTPUT="$(getcddbinfo TRACK-INFO)"
 	fi
@@ -1105,9 +1111,28 @@ do_tag ()
 				echo DISCTOTAL="${DISCTOTAL}"
 			fi
 			echo CDDB="${CDDBDISCID}"
-			# use extended track info for the comment
-			COMMENTOUTPUT="$(getcddbinfo TRACK-INFO)"
-			if [ -n "$(eval echo "${COMMENTOUTPUT}")" ]; then
+			# use the command line comment (-w) for a FLAC comment tag
+			if [ -n "$(eval echo '${USERCOMMENT}')" ]; then
+				USERCOMMENT="$(echo ${USERCOMMENT} | munge_collapsewhitespace )"
+				vecho USERCOMMENT is "${USERCOMMENT}" >&2
+				case "$USERCOMMENT" in
+					*=*) echo "$USERCOMMENT";;
+					*)   echo COMMENT="$USERCOMMENT";;
+				esac
+			fi
+			# use extended disc info for a FLAC comment tag
+			DISCCOMMENT="$(getcddbinfo DISC-INFO | munge_collapsewhitespace )"
+			if [ -n "$(eval echo '${DISCCOMMENT}')" ]; then
+				vecho DISCCOMMENT is "${DISCCOMMENT}" >&2
+				case "$DISCCOMMENT" in
+					*=*) echo "$DISCCOMMENT";;
+					*)   echo COMMENT="$DISCCOMMENT";;
+				esac	
+			fi
+			# use extended track info for a FLAC comment tag
+			COMMENTOUTPUT="$(getcddbinfo TRACK-INFO | munge_collapsewhitespace )"
+			if [ -n "$(eval echo '${COMMENTOUTPUT}')" ]; then
+				vecho COMMENTOUTPUT is "${COMMENTOUTPUT}" >&2
 				case "$COMMENTOUTPUT" in
 					*=*) echo "$COMMENTOUTPUT";;
 					*)   echo COMMENT="$COMMENTOUTPUT";;
@@ -4359,7 +4384,10 @@ while getopts 1a:bBc:C:d:DefgGhj:klLmMnNo:pPQ:r:s:S:t:T:UvVxX:w:W:z opt ; do
 		V) EXTRAVERBOSE=$(($EXTRAVERBOSE + 1)) ;;
 		x) EJECTCD="y" ;;
 		X) CUE2DISCID="$OPTARG" ;;
-		w) COMMENT="$OPTARG" ;;
+		w) COMMENT="$OPTARG"
+		   # preserve this command line comment as USERCOMMENT
+		   USERCOMMENT="${COMMENT}"
+		   ;;
 		W)
 		   re='^[0-9]+([,][0-9]+)?$'
 		   if ! [[ "${OPTARG}" =~ $re ]]; then 

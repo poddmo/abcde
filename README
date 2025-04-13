@@ -27,7 +27,7 @@ MAJOR CHANGES
 
 (see changelog for more details)
 
-Changes in 2.11.0-RC1
+Changes in 2.11.0
 
 * Updates to FLAC comment tags - Comments are being seperated to User, Disc
   and Track comments and CDDB extended data is used where available

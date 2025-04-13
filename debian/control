@@ -1,7 +1,7 @@
 Source: abcde
 Section: sound
 Priority: optional
-Maintainer: Steve McIntyre <93sam@debian.org>
+Maintainer: poddmo <https://github.com/poddmo/abcde>
 Homepage: https://abcde.einval.com/
 Standards-Version: 4.3.0
 Build-Depends: debhelper (>= 10)

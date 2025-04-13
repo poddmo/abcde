@@ -1,3 +1,12 @@
+abcde (2.11.0-1) unstable; urgency=medium
+
+  * New source forked from upstream 2.9.4-DEV
+    + https://github.com/poddmo/abcde
+    + Includes many fixes, improvements and new features. See the GitHub
+      repo for details.
+
+ -- poddmo <https://github.com/poddmo/abcde> Sun, 13 Apr 2025 18:40:00 +1000
+
 abcde (2.9.3-1) unstable; urgency=medium
 
   * New upstream version with fixes since the 2.9.2 release:

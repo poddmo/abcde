@@ -27,6 +27,12 @@ MAJOR CHANGES
 
 (see changelog for more details)
 
+Changes in 2.11.0-RC1
+
+* Updates to FLAC comment tags - Comments are being seperated to User, Disc
+  and Track comments and CDDB extended data is used where available
+* Update config example for FLAC version 1.5
+
 Changes in 2.10.1-RC1
 * Set FLAC ALBUMARTIST metadata tag for multi-artist CDs
 * New munge helper function: munge_simplify_punctuation, to help standardise

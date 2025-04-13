@@ -1,0 +1,557 @@
+0. INTRODUCTION
+   ============
+
+Q. Who created abcde? Who develops it nowadays?
+A. It was originally created by Robert Woodcook. He decided to give up
+   maintaining it at some point in 2002 and Jesus Climent took
+   over. In 2012, Colin Tuckley and Steve McIntyre joined in to
+   help. During 2015-2016 Andrew Strong helped out. Currently Steve
+   maintains abcde. You can contact Steve directly with comments or
+   suggestions at the following email address: Steve McIntyre
+   <93sam@@debian.org>. Or (and maybe better!) try the abcde-users
+   mailing list: abcde-users@lists.einval.com
+
+
+1. INSTALLATION
+   ============
+
+Q. How can I install abcde on my system?
+A. To get abcde you can use a pre-packaged version, available for
+   Debian, Ubuntu, FreeBSD, OpenBSD, NetBSD and others.
+   In case you want to install your own release, you need to download
+   the source and install the complementary programs (abcde is just a
+   frontend and its functionality is provided by other programs).
+
+   abcde needs cd-discid. Grab it from:
+   http://www.hispalinux.es/~data/files/cd-discid/
+
+   Read the README files for a complete list of requirements.
+
+Q. I have a problem, and I reported some time ago. Have you solved it already?
+A. Maybe. Try downloading the master branch of the development from
+   https://git.einval.com/cgi-bin/gitweb.cgi?p=abcde.git
+
+Q. When are you going to release a new version?
+A. When it is ready. :-) We keep on adding new ideas to the trunk
+   (stored in the URL above) and release periodically when we think
+   it's due.
+
+
+2. EXECUTION
+   =========
+
+Q. I want to force abcde 2.x to behave more like 1.x. How do I do it?
+A. Put these options in your abcde.conf:
+
+   INTERACTIVE=n
+   OUTPUTTYPE=mp3
+   ID3TAGV=1
+
+Q. Low on disk space?
+A. abcde has different algorithms to schedule ripping and encoding - to
+   optimize for disk conservation, use -l. You can also define
+   WAVOUTPUTDIR=/some/other/path to your /etc/abcde.conf or ~/.abcde.conf to
+   store the WAV files on another NFS shared fisk, for example.
+   Also, UNIX pipes have also been implemented, using "-P", so abcde reads and
+   encodes the tracks from the CD at once. However, it has the drawback that
+   only one format can be encoded at a time.
+
+Q. How can i make abcde encode faster? My CD reader is way faster than the pace
+   it can encode my tracks.
+A. abcde can take advantage of SMP systems, just like make. Try 'abcde -j 2' -
+   it'll run two encoder jobs while it rips the next track.
+   You can also make use of systems which are networked, with the help of
+   distmp3. For example, MachineA has a better CPU power and MachineB has a CD
+   drive. Run distmp3host (included in distmp3) on Machine A, and then run
+   abcde -r MachineA from MachineB (where "MachineA" is a dns name or IP
+   address). Use this in combination with '-j 0' to shift all encoding off the
+   local machine.
+
+Q. I am having problems with *my CD reading program* reading the drive as a
+   user.
+A. You might have to add yourself (or the users who want to use abcde) to the
+   cdrom group and change the permissions of the cdrom device to 660. If you
+   have a SCSI cdrom drive, check the permissions of /dev/sg* as well.
+
+Q. I would like to give the trackname and the artist_name directly to the
+   encoder (in my case oggenc), but found no documentation.
+A. That is not possible, since abcde gets the information from CDDB database.
+   You can create a template and fill it with the option "-n". Also, you can
+   get the CDDB entry and edit it yourself. abcde has also an option to drop
+   back to a template if you like none of the CDDB entries, selecting 0 from
+   the CDDB options.
+
+Q. (Thanks to Amaya) Where are those options and settings defined? Why dont
+   you include a proper abcde.conf as an example?
+A. We do. It should be installed under /etc/abcde.conf and contains more or
+   less all the defaults abcde uses. You can use $(HOME)/.abcde.conf to
+   override those defaults. More information can be obtained from the man page
+   which can be consulted using "man abcde".
+
+Q. I keep on getting files with ".ogg.ogg" extension. What am I doing wrong?
+A. The code for multiple-output adds automatically the extension of the
+   different outputs you select with the "-o" extension (or with OUTPUTTYPE
+   variable). Erase the ".${OUTPUTTYPE}" part from the OUTPUTFORMAT variable
+   in /etc/abcde.conf or ~/.abcde.conf
+
+Q. I have modified some of the options, and now CDDB has stopped working.
+A. Check that you have modified everything in the right way. For instance, if
+   you modify the HTTPGET program you might want to set some options of your
+   own. If you use the predefined ones (wget, curl and fetch) abcde will try
+   to use some defaults. Keep in mind that the output should go to the output
+   as standard output, to be saved in a file for later use.
+
+   If abcde seems to be ignoring your configuration options or not running
+   commands such as the encoder, you may have misquoted something. Config
+   options such as the following do not work:
+
+   LAMEOPTS=-h -k
+
+   Try this instead:
+
+   LAMEOPTS='-h -k'
+
+Q. How can I separate the different output files I get using multiple-output
+   support?
+A. Use the OUTPUT variable in PLAYLISTFORMAT and OUTPUTFORMAT. It holds the
+   different output file types you passed to abcde (i.e., ogg, mp3, flac)
+   during playlist creation and file/directory creation.
+
+Q. I have a CD with a data track, and abcde complaints it cannot read/encode
+   it.
+A. From version 2.2 onwards, abcde includes some checkings with cdparanoia, to
+   try to get this right.
+   (It is not easy to find a data track on a CD. If you find a "data"
+   track and you know the number, restart abcde specifying the tracks
+   to be encoded, leaving out the data one).
+
+Q. I am requested to have "eject" when setting the speed although I do not use
+   it for anything.
+A. If you do not use cdparanoia, eject is used for setting the speed of the
+   cdrom drive. You can substitute it for "setcd" with "-x" as the argument,
+   but you have to install it manually (setcd is, at least, available in
+   Debian).
+   Another way to get the same results is using the pre_read function, defined
+   in your /etc/abcde.conf file.
+
+Q. I have a CD set with 1+ discs, and want to have them in the same directory,
+   sorted properly. What can abcde do for me?
+A. Set abcde to rip the first CD and give it the option "-t 101". Use a generic
+   name for the CD, and reuse it with the rest of the CDs, editing the CDDB
+   entries. Use "-t 201" for the second CD and so on. Use "-w <comment>" to
+   add a comment about the CD you are ripping (-w "disc #"). Alternatively you
+   can use only the "-t ###" option and then move all the files to the same
+   directory, but the tag/comment information on the files will differ. If you
+   want the tagged track number to be set to the modified number you should use
+   "-T ###".
+   Even better! If you use "-W <cd_number>", abcde will put a comment to every
+   CD set ("CD <number>") and modify the number of the tracks both in the file
+   name and the tag/comment information.
+
+Q. I have a live concert. I want to encode it in a single file. How do i do it?
+A. Use "-1" and it will be encoded in a single file. Use "cue" as an action to
+   make a CUE sheet file where the information about the tracks is stored.
+
+Q. Can I use abcde to take a backup of my CD collection?
+A. Yes. Use "abcde -1 -o flac -a default,cue" and it will create a single-track
+   FLAC file with an embedded cuesheet. Later on, you can use the command
+   "abcde -o vorbis -d flac-file.flac" to extract the individual tracks in
+   Ogg/Vorbis format. Of course you can select whatever format you want.
+
+
+3. CDDB and Musicbrainz
+   ====================
+
+Q. I need to go through an HTTP proxy for CDDB access.
+A. No problem, just export your http_proxy variable first so wget/fetch/curl
+   can see it.
+
+Q. I already store CDDB entries in my hard disc. Can I make use of them?
+A. Piece of cake. Just edit CDDBLOCALDIR to point to the repository and give
+   abcde the "-L" flag to make use of it.
+
+Q. Fine, now it uses local CDDB, but I have no network connection. How can I
+   disable CDDB checks?
+A. Use the "-L -n" combination. It will try to use local CDDB entries, and if
+   nothing can be found, it will use a template. You will be also given the
+   choice to edit such template.
+
+Q. How can I use some other CDDB information provider?
+A. abcde now uses FreeDB by default. To use a different FreeDB mirror or
+   another CDDB service, change the CDDBURL option in your abcde.conf.
+
+Q. After requesting CDDB data, I received several answers which seem to be
+   quite alike. Can I find out the difference between some of them?
+A. Yes. When asked which one you want to select, use "X,Y" where X and Y are
+   the numbers of the selections you want to find the difference between.
+
+Q. I get stuck at the screen with multiple CDDB results. How do I exit this
+   screen so I can make my final selection?
+A. abcde tries to use the system's default pager to display these results
+   and thus the actual application used and the method to exit from this
+   application may vary from system to system.
+   Many systems will be using the applications 'more' or 'less' as their
+   pager and the common key to exit this screen is the letter 'q'. If this
+   does not work on your system you should investigate what your system's
+   default pager application is and from there learn the correct method of
+   exiting this screen.
+
+Q. I don't like CDDB/FreeDB. How can I use Musicbrainz instead?
+A. Set CDDBMETHOD=musicbrainz and try it!
+
+Q. Some of my CDs are on FreeDB, but others are only on
+   Musicbrainz. It's painful having to switch!
+
+A. Since version 2.9, you can specify multiple lookup methods in
+   CDDBMETHOD, abcde will use all of them, and display all the results
+   for you to choose your favourite. This even includes CD-TEXT. To
+   enable all the options, use
+
+   CDDBMETHOD="musicbrainz,cddb,cdtext" in abcde.conf, or
+
+   "-Q musicbrainz,cddb,cdtext"
+
+   on the command line
+
+4. abcde and Album Art
+   ===================
+
+Q. Can abcde download album art?   
+A. As of abcde 2.7 it is possible to download a suitable cover
+   image from within abcde that can be used by applications such
+   as Audacious and vlc to illustrate playback with an album cover.
+   Many hardware playback devices such as iPODs will also use this
+   image during playback and show it on the device's display.
+
+Q. How does album art downloading work?
+A. The details are contained in abcde within a new function called
+   'getalbumart' which can be called either from the commandline or 
+   from within an ~/.abcde.conf file. The technique works in 3 possible
+   ways:
+
+    1. If CDDBMETHOD includes musicbrainz the album art is downloaded from
+       coverartarchive by MBID (MusicBrainz Identifier)
+    2. If 1 fails, download is tried from amazon by ASIN (Amazon 
+       Standard Identification Number)
+    3. If if 1 and 2 fail or CDDBMETHOD is cddb the album art will 
+       be downloaded using glyrc by artist + album title
+
+   You  will need to install your distro's package of glyr, a music 
+   related metadata search engine, and it is strongly advised that
+   you use 'musicbrainz' in your cddb lookups. To access the more 
+   advanced features of getalbumart it is also strongly advised that
+   you install the ImageMagick package of your distro. getalbumart 
+   will work without ImageMagick but functionality will be reduced.
+
+Q. What settings and options should I select?
+A. If you want to operate abcde from the commandline only you will
+   get reasonable results with something like either of the following:
+
+     abcde -o mp3:-V2 -a default,getalbumart
+     abcde -o mp3:-V2 -G
+
+   But to experience all of the options of getalbumart you should also
+   consider setting the following in your ~/.abcde.conf file:
+
+    #----------------------------------------------------------------#
+    CDDBMETHOD=musicbrainz       # Use MusicBrainz for CDDB 
+    ACTIONS=default,getalbumart  # Select the album art action + default
+
+    # Give the path to the metadata search application glyrc. Add any
+    # glyrc options:
+    GLYRC=glyrc
+    GLYRCOPTS= 
+
+    # Give the path to ImageMagick's 'identify' which is used to give a 
+    # commandline summary of the album art and also assist in any conversions.
+    # Add any 'identify' options:
+    IDENTIFY=identify
+    IDENTIFYOPTS=
+
+    # Give the path to ImageMagick's 'display' which will show the album art. 
+    # The options below are the abcde default, feel free to add your own:  
+    DISPLAYCMD=display
+    DISPLAYCMDOPTS="-resize 512x512 -title abcde_album_art"
+
+    # Give the path to ImageMagick's 'convert' which is used to convert album 
+    # art to the format specified in ALBUMARTTYPE. Add any 'convert' options:   
+    CONVERT=convert
+    CONVERTOPTS=
+    # If you want to run CONVERTOPTS on all files (including those specified
+    # in ALBUMARTTYPE) set the following to "y":
+    ALBUMARTALWAYSCONVERT="n"
+
+    # By default the filename will be cover.jpg and the file format will
+    # be jpeg. 'convert' will automagically change other formats to jpeg:
+    ALBUMARTFILE="cover.jpg"
+    ALBUMARTTYPE="JPEG"
+    #----------------------------------------------------------------#
+
+   There are more hints concerning commandline options in the sample 
+   abcde.conf file included with your abcde package. Good news is that
+   the existing defaults will work well without any extra adjustments :).
+
+Q. Can I manually select album art?
+A. If you have set INTERACTIVE=y (this is the default) then you will have
+   the opportunity to manually select the album art of your choice either
+   from online by typing in a URL or by typing in the path to a local file.
+   
+Q. What if I want my album art embedded?
+A. As of abcde 2.8.2 it is possible to have the album art automatically 
+   embedded in the mp3 container using eyeD3, embedded in the flac container
+   using metaflac, embedded in the m4a container using AtomicParsley,
+   embedded in the wv container using wvtag and embedded into an ogg
+   container using vorbiscomment.
+   
+   There are 3 different ways to accomplish this:
+   
+     1. Use the command line '-B' option (this will also call getalbumart)
+     2. Use the command line '-a embedalbumart' option to add to list of actions
+     3. Use 'embedalbumart' in the 'ACTIONS' list in ~/.abcde.conf
+     
+   Adding newer containers for album art embedding should be fairly straightforward
+   and these will be added when the right combination of available abcde developer
+   time and abcde user interest occurs...
+  
+4. FORMATS
+   =======
+
+Q. What formats can I encode my music to?
+A. As of version 2.8.2 abcde includes support for MP3, Ogg/Vorbis,
+   Ogg/Speex, Flac, MPP/MP+(Musepack), AAC, AIFF (Audio Interchange File Format),
+   Alac, WavPack, TTA (True Type Audio), APE (Monkey's Audio), Opus,
+   AC3 and MP2.
+
+Q. I want the new *put the newest and coolest codec there* format to be
+   supported by abcde. Abcde is so cool but i want to encode also to this
+   new format...
+A. Patches are welcome! ;)
+   No, seriously, if the format is usable, available for Linux and open
+   source/free software, it should be fairly easy to integrate. Support for
+   AAC (m4p) should be the next one to be introduced.
+
+Q. I use Debian/RedHat/(put your Unix flavour here) and MP3 encoding is not
+   working. What am I doing wrong?
+A. Since MP3 is considered non-free (you get it for free, but hardware players
+   and net broadcasters have to pay license fees), some release engineering
+   groups and release management teams have decided not to provide MP3 encoding
+   tools.
+   These distributions or operating systems have decided to use Ogg/Vorbis as
+   the default encoding format, since it contains no (known) patent claims
+   and they are (supposed to be) completely Free (released under a BSD-like
+   license).
+   However, there is no strong (at the moment) hardware support, although
+   some groups and companies are strongly working on getting it, real soon
+   now. For that reason some people prefer to encode to MP3.
+
+   UPDATE *** UPDATE
+   There are known brands already selling Ogg/Vorbis portable players: Rio,
+   iRiver, Neuros, iAudio,...
+   Go buy one and you have no more reasons to use MP3.
+
+   If you are among those individuals, you might need to add support for MP3
+   encoding to your system:
+   Debian : By default includes LAME support.
+   RedHat : search on rpmfind.net
+   FreeBSD: By default includes LAME support.
+   OpenBSD: Available by specifying you want to install the port with LAME
+            support, or by just installing it later from the ports tree.
+   NetBSD : Available in pkgsrc.
+
+   Others : Please, help us here.
+
+Q. Huh! Why is MPPENCODER (with MPP) and .mpc the extension?
+A. Dunno. You must ask the guys who created and defined the format. The
+   standard is MPEGplus (MPP/MP+) but the files use .mpc extension.
+   
+Q. Why do I get .aac files instead of .m4a files when I encode with faac?
+A. Faac uses mp4v2 to create aac files in an m4a or mp4 container. Some 
+   Linux distros have disabled this mp4v2 support due to a licensing issue 
+   and this leave faac only capable of generating mpeg-2/ADTS streams. 
+   These streams should correctly have the .aac file extension and some 
+   players (such as Audacious) will not even play mpeg-2/ADTS streams when
+   they are placed in an .m4a container.
+   As of version 2.7 abcde tests the version of faac being used for mp4v2 
+   support and then appropriately  places the audio either in .m4a or .aac. 
+   Note that tagging is not possible with mpeg-2/ADTS streams in .aac.
+   
+Q. How do I encode to Apple Lossless Audio Codec (alac)?
+A. As of abcde 2.7.1 there are 3 ways to encode to alac: using qaac, refalac
+   or FFmpeg. To use qaac or refalac follow the installation directions here:
+
+   http://www.andrews-corner.org/qaac.html#installation
+
+   and then set your ~/.abcde.conf file as follows:
+
+   AACENCODERSYNTAX=qaac
+   QAAC="$HOME/.wine/drive_c/qaac/qaac.exe"
+   # Or use the Open Source alac encoder with this small hack:
+   # QAAC="$HOME/.wine/drive_c/qaac/refalac.exe"
+   QAACENCOPTS="--alac --threading --verbose"
+   OUTPUTTYPE="m4a"
+
+   To use FFmpeg (or avconv) set your ~/.abcde.conf file as follows:
+
+   AACENCODERSYNTAX=ffmpeg
+   FFMPEG=ffmpeg
+   # Or give the path to avconv instead:
+   # FFMPEG=avconv
+   FFMPEGENCOPTS="-c:a alac"
+   OUTPUTTYPE="m4a"
+
+   And then sit back and enjoy the music :)
+
+Q. Will FFmpeg be used with abcde for any other audio formats?
+A. The plan is to use FFmpeg (or avconv) when FFmpeg has a good quality native
+   encoder available. For example FFmpeg has a low quality native native encoder
+   for Vorbis and AAC which will not be used but a great reverse engineered alac
+   encoder that has been used in abcde. FFmpeg also has a good WavPack encoder
+   that has been added in abcde 2.7.1 which can be added into your ~/.abcde.conf
+   file as follows:
+
+   # WVENCODERSYNTAX=wavpack
+   WVENCODERSYNTAX=ffmpeg
+   # Appropriate PATH:
+   WAVPACK=wavpack
+   FFMPEG=ffmpeg
+   # Appropriate options:
+   FFMPEGENCOPTS="-c:a wavpack -compression_level 6"
+   WAVPACKENCOPTS="-hx3"
+   # Correct output type:
+   OUTPUTTYPE="wv"
+
+   You can see in this example how easy it is to switch from one WavPack encoder to
+   another by changing the comment mark '#' on the WVENCODERSYNTAX line. For mp2
+   encoding with FFmpeg try the following:
+   
+   # MP2ENCODERSYNTAX=twolame
+   MP2ENCODERSYNTAX=ffmpeg
+   # Appropriate PATH:
+   TWOLAME=twolame
+   FFMPEG=ffmpeg
+   FFMPEGENCOPTS='-c:a mp2 -b:a 320k'
+   TWOLAMENCOPTS='--bitrate 320'
+   # Correct output type:
+   OUTPUTTYPE="mp2"
+   
+   Currently FFmpeg supports: alac, wavpack,mp2 and AIFF. FFmpeg native aac support will
+   be added when it comes out of 'experimental'. FFmpeg is also used as the default
+   encoder for the Matroska or mka container. A typical example, using the FFmpeg
+   native ac3 encoder, is:
+
+   MKAENCODERSYNTAX=ffmpeg
+   FFMPEG=ffmpeg
+   FFMPEGENCOPTS="-c:a ac3 -b:a 448k"
+   OUTPUTTYPE="mka"
+
+   Other suitable codecs for this usage are Vorbis, MP2, MP3, LC-AAC, HE-AAC, WMAv1,
+   WMAv2, eAC3 and Opus. There is much more to come in the future for abcde and FFmpeg!
+
+
+5. USEPIPES
+   ========
+
+Q. What is/are 'USEPIPES'??
+A. This is a slightly different method of ripping and encoding with abcde
+   utilising Unix pipes. Using this method a program sends as output what
+   another programs expects as input without writing the information to the
+   hard disk. For it to work with abcde, a ripper must send the data of the
+   CD tracks which are ripped to the 'standard output', while sending other
+   information and error messages to 'standard error' so that the encoder
+   does not get confused. The encoder program needs to be able to encode the
+   information send to it by reading from the standard input (which is what
+   the ripper sends to the standard output).
+   Usually Unix/Linux programs deal with the standard input/output by using
+   the special file name '-', as in the following example:
+
+   cdripper -o - | audioencoder -i - -o file.ext
+
+   The 'cdripper' program uses the flag '-o' to identify the file it will
+   output the data to. For the 'audioencoder' program to be able to read
+   the output through a Unix pipe (the '|' symbol), the output needs to be
+   sent to the standard output using the '-' special filename. Once the
+   output has been piped to 'audioencoder' we use the same special filename
+   to read the information as input with the '-i' flag and output it to
+   'file.ext' with the '-o' flag.
+
+Q. How do I use USEPIPES with abcde?
+A. You can run USEPIPES in either of two ways:
+
+     1. Add 'USEPIPES=y' to your ~/.abcde.conf file
+     2. Use the commandline option 'abcde -P'
+
+Q. Do all rippers and encoders work with USEPIPES?
+A. No :). Keep in mind that every ripper and encoder differs from in each
+   other in the way they interact with pipes and not all rippers and encoders
+   will use or understand the '-o' and '-' options. Currently (August 2015) the
+   following rippers and encoders work:
+
+   Rippers:  cdparanoia, debug, libcdio, cdda2wav, flac, pird.
+   Encoders: mp3enc, lame, bladeenc, oggenc, opusenc, flac, speexenc,
+             mpcenc, wavpack, faac, neroAacEnc, fdkaac, qaac, fhgaacenc,
+             ffmpeg, tta, ttaenc.
+
+Q. Can I add a ripper or encoder which is not supported?
+A. Sure! If you plan to use a ripper or encoder which is not supported you
+   need to know how to use the ripper/encoder. For example, cdparanoia just
+   uses '-' as the output filename and works. The program used to decode
+   FLAC files (yes, abcde supports 'ripping' from a FLAC file :) uses '-c'.
+   To add support for a ripper called 'cdripper' which uses the '-' special
+   flag for outputting to the standard output, you need to open the config
+   file (either /etc/abcde.conf or ~/.abcde.conf) and add the line:
+
+     PIPERIPPER_cdripper="-"
+   
+   For an encoder called 'audioencoder' which uses '--stdin' to read the pipe
+  input, you need to add:
+
+     PIPE_audioencoder="--stdin"
+
+  Of course, you should try your configuration and report it to the abcde
+  developers so that it can be included in future versions of abcde. If
+  you are familiar with POSIX shell programing, please open "abcde" and
+  take a look at the lines below the one marked with "###USEPIPESSUPPORT###",
+  the required syntax is reasonably clear.
+
+6. MISC
+   ====
+
+Q. What happened with normalize?
+A. Normalize has changed its name under Debian, which is the GNU/Linux
+   distribution for developing abcde (well, is the GNU/Linux Distribution
+   Steve uses, at the moment). Now it is called normalize-audio.
+   If you are using some other flavour of OS, you need to change the name
+   of the executable in your abcde.conf file.
+
+Q. I am using MacOSX and I am having problems to use abcde.
+A. Well, I have a Mac, but I use linux on it. I have not been able to find
+   a way to make it work there, since I do not have the development tools
+   installed. I have placed a basic support, but some user reports are just
+   complaining about abcde not encoding the ripped tracks, as if
+   icedax/cdda2wav/cdparanoia/cddafs would never end reading them. If you have
+   such a system and experience problems, please, report them, and I will
+   try to work them out with your help.
+
+Q. My hardware player (put it here) does not recognize the playlists created
+   with abcde. What I am doing wrong?
+A. Try using "-m" when creating the playlists, or setting DOSPLAYLIST as an
+   option in the config file.
+
+Q. What is the odd-looking progress indicator when ripping?
+A. cdparanoia is the default ripping program used by abcde on many
+   platforms, and it tries to give information about the ripping
+   quality as it runs. See the cdparanoia(1) man page for more
+   details, or look online at
+   https://www.xiph.org/paranoia/faq.html#progbar
+
+OBSOLETE
+--------
+Q. I set KEEPWAVS to "y" but abcde insists on erasing my directory, along
+   with the wav tracks. What I am doing wrong?
+A. The default action set includes clean, which cleans the temp directory,
+   if nothing goes wrong. Take the "clean" out from the action list and you
+   are done.
+   UPDATE: KEEPWAVS unselects now the clean action.
+
+--
+Steve McIntyre <93sam@@debian.org>

@@ -1,3 +1,18 @@
+abcde 2.11.0-RC1
+ * New feature:
+  + CDDB extended info is passed into FLAC tags
+ * Config and doc update:
+  + example config for multi-threaded FLAC encoding using new FLAC version 1.5
+ * Packaging: pull in all files from upstream 2.9.4-DEV to make this project
+   an up to date and complete repository for abcde
+
+ -- poddmo <https://github.com/poddmo/abcde> Mon 17 Mar 2025 18:00:00
+
+abcde 2.10.1-RC2
+ * doc and config tweaks
+
+ -- poddmo <https://github.com/poddmo/abcde> Sat 26 Oct 2024 18:00:00
+
 abcde 2.10.1-RC1
 
  * New features:

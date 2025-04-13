@@ -16,7 +16,11 @@ My ripping objective is to create lossless music tracks (flac) for listening and
 - Improved handling of CD sets:
   - The -W option is expanded to optionally add the total number of discs in the set. These details are recorded in the FLAC metadata tags DISCNUMBER and DISCTOTAL
   - Create playlist defaults to append instead of erase when the disc number is greater than 1
-- Improved handling of metadata: CDDB extended info (EXT*) are added passed through to FLAC tags
+- Improved handling of FLAC COMMENT metadata:
+  - comments added on the command line with the -w option are designated as USERCOMMENTS and added to every track
+  - CDDB extended data (EXTD) are passed through to FLAC COMMENT tags and added to every track
+  - CDDB extended track data (EXTTn) is passed through to FLAC COMMENT tags for the relevant track
+  - see https://gnudb.org/gnudbformat.php for Gnudb xmcd file format
 - Set the FLAC ALBUMARTIST="Various Artists" metadata tag for multi-artist CDs
 - Define a default local album art directory/file location. If the album artwork download fails or the user chooses to overide the downloaded art, abcde will look for ALBUMARTDIR/ALBUMARTFILE before asking the user to manually enter the filename.
 - Created munge helper functions:

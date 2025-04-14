@@ -84,7 +84,7 @@ dpkg -i abcde_2.11.0-1_all.deb
 ```
 - Line 1: Verbose rip (`-V`), download albumart (`-G`), output to FLAC (`-o flac`) from CDROM drive (`-d /dev/sr0`)
 - Line 2: The CD in my first optical drive (`-d /dev/sr0`) is the first disc of a set (`-W 1,2`)
-- Line 3: I only try to download albumart for the first disc in a set. Disc 2 or 2 (`-W 2,2`) is in my second optical drive (`-d /dev/sr1`)
+- Line 3: I only try to download albumart for the first disc in a set. Disc 2 of 2 (`-W 2,2`) is in my second optical drive (`-d /dev/sr1`)
 
 ## Config file
 This is my $HOME/.abcde.conf

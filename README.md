@@ -89,6 +89,7 @@ dpkg -i abcde_2.11.0-1_all.deb
 ## Config file
 This is my $HOME/.abcde.conf
 ```
+export LC_ALL=en_AU.UTF-8		# define locale
 MAXPROCS=4                              # Run a few encoders simultaneously
 PADTRACKS=y                             # Makes tracks 01 02 not 1 2
 EXTRAVERBOSE=2                          # Useful for debugging

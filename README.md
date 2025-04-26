@@ -40,7 +40,6 @@ Your feedback is very welcome. Please open an issue or pull request and I will l
   - This helps to prevent artist duplication due to inconsistent capitalisation
 
 ## Todo
-- detect hidden track one audio (HTOA) and notify if it exists
 - improve the diff display: show cddb entry number and source (ie musicbrainz, cddb, cd-text, local) in the header
 - highlight CDDB entries with extended info and provide a way to view it
 - make the CDDB entry choice prompt for locally cached (line ~2618) the same as in do_cddbedit (line ~3031)

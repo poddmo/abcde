@@ -1,4 +1,4 @@
-abcde_version = abcde-2.11.0
+abcde_version = abcde-2.11.1
 INSTALL = /usr/bin/install -c
 
 prefix = /usr/local

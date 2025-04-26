@@ -1,8 +1,9 @@
 # Introduction
 This is a fork of [abcde](https://abcde.einval.com/wiki/):
 > abcde version 2.9.3 is the most recent download and was released on February 5th 2019.
+The starting point for this repository was [2.9.4-DEV](https://git.einval.com/git/abcde.git) with the last commit dated 2021-02-14.
 
-I've ripped many hundreds of CD's with abcde and wanted to fix some bugs and have a go at some enhancements - now up to version 2.11.0 released on April 13th 2025.
+I've ripped many hundreds of CD's with abcde and wanted to fix some bugs and have a go at some enhancements - now up to version 2.11.1 released on April 26th 2025.
 
 My ripping objective is to create lossless music tracks (flac) for listening and also to record as much information from the read process as possible for archival posterity, such as TOC, cue sheet, CD-TEXT, enhanced CD directory listing, media read progress/status/errors and metadata downloaded. Ideally the info should be stored in the audio file metadata.
 
@@ -58,19 +59,19 @@ Your feedback is very welcome. Please open an issue or pull request and I will l
 - Download the latest package or source code from: https://github.com/poddmo/abcde/releases/latest
 ## Package Installation
 ```
-wget https://github.com/poddmo/abcde/releases/download/2.11.0/abcde_2.11.0-1_all.deb
-dpkg -i abcde_2.11.0-1_all.deb
+wget https://github.com/poddmo/abcde/releases/download/2.11.1/abcde_2.11.1-1_all.deb
+dpkg -i abcde_2.11.1-1_all.deb
 ```
 
 ## Source Installation
 Download the source, extract it, create a package from it and then install your fresh package:
 ```
-wget -O abcde_2.11.0.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.11.0.tar.gz
-tar zxf abcde_2.11.0.tar.gz
-cd abcde-2.11.0
+wget -O abcde_2.11.1.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.11.1.tar.gz
+tar zxf abcde_2.11.1.tar.gz
+cd abcde-2.11.1
 dpkg-buildpackage -us -uc --build=binary
 cd ..
-dpkg -i abcde_2.11.0-1_all.deb
+dpkg -i abcde_2.11.1-1_all.deb
 ```
 
 # Testing

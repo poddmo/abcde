@@ -27,6 +27,9 @@ MAJOR CHANGES
 
 (see changelog for more details)
 
+Changes in 2.11.1
+* New feature: read Hidden Track One Audio if found
+
 Changes in 2.11.0
 
 * Updates to FLAC comment tags - Comments are being seperated to User, Disc

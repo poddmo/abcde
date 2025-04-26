@@ -11,7 +11,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-VERSION='2.11.0'
+VERSION='2.11.1'
 
 usage ()
 {
@@ -1120,7 +1120,7 @@ do_tag ()
 					*)   echo COMMENT="$USERCOMMENT";;
 				esac
 			fi
-			# use extended disc info for a FLAC comment tag
+			# use CDDB extended disc info for a FLAC comment tag
 			DISCCOMMENT="$(getcddbinfo DISC-INFO | munge_collapsewhitespace )"
 			if [ -n "$(eval echo '${DISCCOMMENT}')" ]; then
 				vecho DISCCOMMENT is "${DISCCOMMENT}" >&2
@@ -1129,7 +1129,15 @@ do_tag ()
 					*)   echo COMMENT="$DISCCOMMENT";;
 				esac	
 			fi
-			# use extended track info for a FLAC comment tag
+			# abcde generated track comment, eg hidden track notice
+			if [ -n "$(eval echo '${ABCDECOMMENT}')" ]; then
+				vecho ABCDECOMMENT is "${ABCDECOMMENT}" >&2
+				case "$ABCDECOMMENT" in
+					*=*) echo "$ABCDECOMMENT";;
+					*)   echo COMMENT="$ABCDECOMMENT";;
+				esac
+			fi
+			# use CDDB extended track info for a FLAC comment tag
 			COMMENTOUTPUT="$(getcddbinfo TRACK-INFO | munge_collapsewhitespace )"
 			if [ -n "$(eval echo '${COMMENTOUTPUT}')" ]; then
 				vecho COMMENTOUTPUT is "${COMMENTOUTPUT}" >&2
@@ -1983,6 +1991,7 @@ do_playlist ()
 				CDDBTRACKNUM=$(expr $UTRACKNUM - 1) # Unpad
 				getcddbinfo TRACKNAME
 				splitvarious
+				if [ "$UTRACKNUM" = "00" ]; then TRACKNAME="Hidden Track" ; fi
 				TRACKFILE="$(mungetrackname "$TRACKNAME")"
 				ARTISTFILE="$(mungeartistname "$TRACKARTIST")"
 				ALBUMFILE="$(mungealbumname "$DALBUM")"
@@ -2177,7 +2186,7 @@ abcde.mkcue () {
 		printf "  TRACK %02i AUDIO\n" $i
 		if [ "$i" -eq 1 ] && [ "$1" -ne 150 ] ; then
 			if [ "$MODE" = PREGAP ] ; then
-				echomsf "    PREGAP " $(($"OFFSET" - 150))
+				echomsf "    PREGAP " $(("$OFFSET" - 150))
 			else
 				echo    "    INDEX 00 00:00:00"
 			fi
@@ -2338,7 +2347,7 @@ do_discid ()
 			log info "The disc does not contain any tracks. Giving up..."
 			exit 0
 		fi
-		echo -n "Grabbing entire CD - tracks: "
+		echo -n "Grabbing entire CD - "
 		if [ ! "$PADTRACKS" = "y" ] ; then
 			TRACKNUMPADDING=$(echo -n $TRACKS | wc -c | tr -d ' ')
 		fi
@@ -2351,7 +2360,22 @@ do_discid ()
 			TRACKQUEUE="$TRACKQUEUE $PT"
 			X=$(($X + 1))
 		done
-		echo "$TRACKQUEUE"
+
+		# if the pregap to track1 > 150 frames (2 Secs) then there is probably Hidden Track One Audio (HTOA)
+		# cdparanoia can rip it by specifying track zero.
+		if [ "$CDROMREADERSYNTAX" = "cdparanoia" ] ; then
+			if [ "${READHIDDENTRACK:-n}" = "y" ]; then
+				X=$(echo "$CDPARANOIAOUTPUT" | awk '$1=="1." {if ($4 > 150) print "y"; else print "n"};')
+				if [ "$X" = "y" ]; then
+					# hidden track exists so prepend it to TRACKQUEUE
+					echo -n 'Hidden track found - ' >&2
+					X=$(printf "%0.${TRACKNUMPADDING}d" 0)
+					TRACKQUEUE=$(echo $X $TRACKQUEUE)
+				fi
+			fi
+		fi
+
+		echo "Tracks queued: $TRACKQUEUE"
 	else
 		TRACKS=$(echo "$CDDBTRACKINFO" | cut -f2 -d' ')
 		# User-supplied track queue.
@@ -3736,7 +3760,10 @@ do_cdread ()
 	if [ "$1" = "onetrack" ]; then
 		echo "Grabbing ${PIPE_MESSAGE}tracks $UTRACKNUM - $LASTTRACK as one track ..." >&2
 	else
-		if [ -r "$CDDBDATA" ]; then
+		if [ "$UTRACKNUM" = "00" ]; then
+			TRACKNAME="Hidden Track"
+			echo "Grabbing ${PIPE_MESSAGE}track $UTRACKNUM: $TRACKNAME..." >&2 
+		elif [ -r "$CDDBDATA" ]; then
 			getcddbinfo TRACKNAME
 			echo "Grabbing ${PIPE_MESSAGE}track $UTRACKNUM: $TRACKNAME..." >&2
 		else
@@ -3753,6 +3780,8 @@ do_cdread ()
 		cdparanoia|libcdio)
 			if [ "$USEPIPES" = "y" ]; then
 				nice $READNICE $CDROMREADER -"$CDPARANOIACDROMBUS" "$CDROM" "${READTRACKNUMS:-$UTRACKNUM}" "$FILEARG"
+			elif [ "$UTRACKNUM" = "00" ]; then
+				nice $READNICE $CDROMREADER -Z -"$CDPARANOIACDROMBUS" "$CDROM" "${READTRACKNUMS:-$UTRACKNUM}" "$FILEARG" >&2
 			else
 				nice $READNICE $CDROMREADER -"$CDPARANOIACDROMBUS" "$CDROM" "${READTRACKNUMS:-$UTRACKNUM}" "$FILEARG" >&2
 			fi
@@ -4017,6 +4046,7 @@ NOCDDBQUERY=n
 FLACTAGSTARTCASE=n
 FLACTAGALBUMARTISTTAGNAME="ALBUMARTIST"
 FLACTAGALBUMARTISTVALUE="Various Artists"
+READHIDDENTRACK=n
 
 # If using scsi devices, cdda2wav/icedax needs a CDROMID, instead of a device node
 # i.e. CDROMID="1,0,0"
@@ -5670,7 +5700,12 @@ do
 	## FIXME ## Add here
 	## run_command "tagtrack-$OUTPUT-$1" $METAFLAC $METAFLACOPTS ${IMPORTCUESHEET:+--import-cuesheet-from="${ABCDETEMPDIR}/$CUEFILE"} --import-tags-from=- "${ABCDETEMPDIR}/track$1.$FLACOUTPUTCONTAINER"
 	# Set TRACKNUM, TRACKNAME
-	if [ -e "$CDDBDATA" ]; then
+	if [ "$UTRACKNUM" = "00" ]; then
+        	# hidden track one audio
+        	TRACKNAME="Hidden Track"
+        	TRACKARTIST="$DARTIST"
+        	ABCDECOMMENT="Hidden Track One Audio"
+	elif [ -e "$CDDBDATA" ]; then
 		if [ "$ONETRACK" = "y" ]; then
 			TRACKNAME="$DALBUM"
 			TRACKNUM="$FIRSTTRACK"
@@ -5719,6 +5754,9 @@ do
 		fi
 	fi
 	) &
+
+	# Clean up our abcde track comments
+	unset ABCDECOMMENT
 done
 
 

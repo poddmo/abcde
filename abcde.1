@@ -1,4 +1,4 @@
-.TH abcde 1 "13 April 2025" "abcde 2.11.0"
+.TH abcde 1 "26 April 2025" "abcde 2.11.1"
 .SH NAME
 abcde \- Grab an entire CD and compress it to Ogg/Vorbis, MP3, FLAC, Ogg/Speex, AAC, 
 WavPack, Monkey's Audio (ape), MPP/MP+(Musepack), True Audio (tta), MP2 format
@@ -555,6 +555,10 @@ playlists, etc.
 .B DOSPLAYLIST
 If set, the resulting playlist will have CR-LF line endings, needed by some
 hardware-based players.
+.TP
+.B READHIDDENTRACK
+If your CD drive can read into the pregap of track 1 then set this to y to  
+copy Hidden Track One Audio (HTOA), if it exists. (Currently only used with cdparanoia)
 .TP
 .B FLACTAGSTARTCASE
 If set to y, artist name, album title and track title FLAC tags will be

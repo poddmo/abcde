@@ -38,6 +38,7 @@ Your feedback is very welcome. Please open an issue or pull request and I will l
 - Add new mungefilename config example to use munge helper functions
 - Create new config option FLACTAGSTARTCASE to use munge_Startcase for FLAC tags artist name, album title and track titles
   - This helps to prevent artist duplication due to inconsistent capitalisation
+- Read hidden track one audio tracks, if they exist
 
 ## Todo
 - improve the diff display: show cddb entry number and source (ie musicbrainz, cddb, cd-text, local) in the header
@@ -90,7 +91,7 @@ dpkg -i abcde_2.11.1-1_all.deb
 This is my $HOME/.abcde.conf
 ```
 export LC_ALL=en_AU.UTF-8		# define locale
-MAXPROCS=4                              # Run a few encoders simultaneously
+READHIDDENTRACK=y
 PADTRACKS=y                             # Makes tracks 01 02 not 1 2
 EXTRAVERBOSE=2                          # Useful for debugging
 EJECTCD=y                               # Please eject cd when finished :-)

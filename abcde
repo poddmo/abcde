@@ -249,11 +249,11 @@ page ()
 		# Use the debian sensible-pager wrapper to pick the pager user
 		# has requested via their $PAGER environment variable
 		if [ -x "/usr/bin/sensible-pager" ]; then
-			/usr/bin/sensible-pager "$PAGEROPTS" "$PAGEFILE"
+			/usr/bin/sensible-pager ${PAGEROPTS:+"$PAGEROPTS"} "$PAGEFILE"
 		elif [ -x "$PAGER" ]; then
 			# That failed, try to load the preferred pager, starting
 			# with their PAGER variable
-			$PAGER "$PAGEROPTS" "$PAGEFILE"
+			$PAGER ${PAGEROPTS:+"$PAGEROPTS"} "$PAGEFILE"
 			# If that fails, check for less
 		elif [ -x /usr/bin/less ]; then
 			/usr/bin/less -f "$PAGEFILE"

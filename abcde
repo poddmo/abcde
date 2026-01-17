@@ -999,6 +999,13 @@ do_tag ()
 							${COMMENTOUTPUT:+--comment "$COMMENTOUTPUT"} \
 							);;
 					esac
+					if [ -n "$DISCNUMBER" ]; then
+					    addopts+=("-d $DISCNUMBER")
+					fi
+					if [ -n "$DISCTOTAL" ]; then
+					    addopts+=("-D $DISCTOTAL")
+					fi
+										
 					run_command "tagtrack-$OUTPUT-$1" nice $ENCNICE $TAGGER $TAGGEROPTS \
 						-A "$DALBUM" \
 						-a "$TRACKARTIST" -t "$TRACKNAME" \

@@ -2237,6 +2237,7 @@ do_discid ()
 
 							LEADOUT=$(( $(echo "$CUESHEET" | grep lead-out | get_last) * 75 / 44100 ))
 							LEADIN=$(( $(echo "$CUESHEET" | grep lead-in | get_last) * 75 / 44100 ))
+							LEADOUT=$((LEADOUT - $(set - $OFFSETS; echo $1)))
 							makeids
 						;;
 						*)

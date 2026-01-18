@@ -1005,11 +1005,14 @@ do_tag ()
 					if [ -n "$DISCTOTAL" ]; then
 					    addopts+=("-D $DISCTOTAL")
 					fi
+					if [ "${GENREID}" != 255 ]; then
+					    addopts+=( -G "$GENREID" )
+					fi
 										
 					run_command "tagtrack-$OUTPUT-$1" nice $ENCNICE $TAGGER $TAGGEROPTS \
 						-A "$DALBUM" \
 						-a "$TRACKARTIST" -t "$TRACKNAME" \
-						-G "$GENREID" -n "${TRACKNUM:-$1}" \
+						-n "${TRACKNUM:-$1}" \
 						${TRACKNUM:+-N "$TRACKS"} \
 						"${addopts[@]}" \
 						"${ABCDETEMPDIR}/track$1.$OUTPUT"

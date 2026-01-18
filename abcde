@@ -1160,6 +1160,12 @@ do_tag ()
 							${IMPORTCUESHEET:+--import-cuesheet-from="${ABCDETEMPDIR}/${CUEFILE}"} \
 							--import-tags-from=- "${ABCDETEMPDIR}/track$1.$FLACOUTPUTCONTAINER"
 							# "fudge comment to "fix" joe syntax highlight quote bug
+				if [ "$ONETRACK" = "y" ]; then
+					# also add the cuesheet as a flac tag
+					run_command "tagtrack-$OUTPUT-$1" nice $ENCNICE $METAFLAC $METAFLACOPTS \
+                                                        --set-tag-from-file=CUESHEET="${ABCDETEMPDIR}/${CUEFILE}" \
+                                                        "${ABCDETEMPDIR}/track$1.$FLACOUTPUTCONTAINER"
+				fi
 			;;
 		spx)
 			run_command "tagtrack-$OUTPUT-$1" true
@@ -5749,14 +5755,14 @@ do
 		fi
 	fi
 	if [ "$DOTAG" = "y" ]; then
-		if checkstatus "encodetrack-$UTRACKNUM"; then
-			if checkstatus "tagtrack-$UTRACKNUM"; then :; else do_tag "$UTRACKNUM"; fi
-		fi
 		# Lets tag the cue file
 		if checkstatus cleancuefile >/dev/null; then :; else
 			if checkstatus cuefile >/dev/null ; then
 				do_cleancue
 			fi
+		fi
+		if checkstatus "encodetrack-$UTRACKNUM"; then
+			if checkstatus "tagtrack-$UTRACKNUM"; then :; else do_tag "$UTRACKNUM"; fi
 		fi
 	fi
 	if [ "$DOMOVE" = "y" ]; then

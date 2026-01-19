@@ -617,6 +617,7 @@ makeids ()
 	printf -v CDDBDISCID "%08lx" $(( ($CDDBCKSUM % 0xff) * 16777216 | $TOTALTIME * 256 | $TRACKS))
 	CDDBTRACKINFO="${CDDBDISCID} $((TRACKS)) ${COOKEDOFFSETS} $((($LEADOUT + $LEADIN + $IDMAGICNUM) / $CDFRAMES))"
 
+	url=
 	case $CDDBMETHOD in
 		*musicbrainz*)
 			# FIXME: don't assume the first track is 1
@@ -626,7 +627,15 @@ makeids ()
 				log error "$MUSICBRAINZ failed to run; ABORT"
 				exit $error
 			fi
-			MBTRACKINFO="${MBDISCID} $((TRACKS)) ${COOKEDOFFSETS} $((($LEADOUT + $LEADIN + $IDMAGICNUM) / $CDFRAMES))"
+                        # Since we're querying musicbrainz, we'll construct
+                        # a submission URL in case the lookup fails.  We do
+                        # this in pieces for easier reading.
+                        # FIXME: don't assume the first track is 1 (which is
+                        # what "toc=1" indicates.)
+                        url="http://musicbrainz.org/cdtoc/attach?id=$DISCID"
+                        url="$url&tracks=${TRACKS% *}&toc=1+${TRACKS% *}"
+                        url="$url+$((LEADIN+$LEADOUT))+${COOKEDOFFSETS// /+}"
+			MBTRACKINFO="${MBDISCID} $((TRACKS)) ${COOKEDOFFSETS} $((($LEADOUT + $LEADIN + $IDMAGICNUM) / $CDFRAMES))${url:+ $url}"
 			;;
 	esac
 }
@@ -2217,6 +2226,7 @@ abcde.mkcue () {
 # This is essentially the start of things
 do_discid ()
 {
+	SUBMITURL=
 	if [ -z "${CDDBDISCID}" ]; then
 		vecho -n "Getting CD track info... "
 		# In OSX, unmount the disc before a query
@@ -2313,6 +2323,13 @@ do_discid ()
 		fi
 		WEHAVEACD=y
 		CDDBDISCID=$(echo "$CDDBTRACKINFO" | cut -f1 -d' ')
+
+                # If MBTRACKINFO has a URL tacked onto the end, isolate it.
+                if [ "$MBTRACKINFO" != "${MBTRACKINFO% http://*}" ]; then
+                        SUBMITURL=http://${MBTRACKINFO##* http://}
+                        MBTRACKINFO=${MBTRACKINFO% http://*}
+                fi
+
 	else
 		CDDBTRACKINFO=$(cat "$WAVOUTPUTDIR/abcde.${CDDBDISCID}/cddbdiscid")
 		MBTRACKINFO=$(cat "${WAVOUTPUTDIR}/abcde.${CDDBDISCID}/mbdiscid")
@@ -2535,6 +2552,7 @@ do_discid ()
 	case "$CDDBMETHOD" in
 		*musicbrainz*)
 			echo "$MBTRACKINFO" > "${ABCDETEMPDIR}/mbdiscid"
+                        [ -n "$SUBMITURL" ] && echo "$SUBMITURL" > "$ABCDETEMPDIR/submiturl"
 			;;
 	esac
 }
@@ -2863,12 +2881,36 @@ do_musicbrainz_read ()
 		MBDISCID=$(echo "$MBTRACKINFO" | cut -d' ' -f1)
 		local SOURCE_WORKDIR="${ABCDETEMPDIR}/data-musicbrainz"
 		mkdir -p "${SOURCE_WORKDIR}"
-		${MUSICBRAINZ} --command data --discid "${MBDISCID}" --workdir "${SOURCE_WORKDIR}" --start ${NUM_CDDB_MATCHES}
-		error=$?
-		if [ $error != 0 ]; then
-			log error "$MUSICBRAINZ failed to run; ABORT"
-			exit $error
-		fi
+
+                # We'll repeatedly try the MB query until it succeeds or the
+                # user declines to submit it.
+                while : ; do
+                        ${MUSICBRAINZ} --command data --discid "$MBDISCID" --workdir "${SOURCE_WORKDIR}" --start ${NUM_CDDB_MATCHES}
+                        error=$?
+                        if [ $error != 0 ]; then
+                               log error "$MUSICBRAINZ failed to run; ABORT"
+                               exit $error
+                        fi
+                        [ -f "${SOURCE_WORKDIR}/cddbread.1" ] && break
+                        [ ! -f "${ABCDETEMPDIR}/submiturl" ] && break
+                        # Since the lookup failed and we have a URL, offer submitting
+                        # the disc via that URL.
+                        echo -n "Submit via http [y/N]? " >&2
+                        if [ "$INTERACTIVE" = "y" ]; then
+                                read ANSWER
+                        else
+                                echo n >&2
+                                ANSWER=n
+                        fi
+                        if [ "$ANSWER" = "y" ]; then
+                                echo "Visit $(<"${ABCDETEMPDIR}/submiturl")"
+                                echo -n "Then hit enter to retry lookup..."
+                                read ANSWER
+                                ANSWER=
+                        else
+                                break
+                        fi
+                done
 
 		# Check for no matches.
 		# The helper script will write disc matches out to
@@ -4136,7 +4178,7 @@ CDDAFS=cp
 PIRD=pird
 CDDISCID="cd-discid"
 CDDBTOOL=cddb-tool
-MUSICBRAINZ=abcde-musicbrainz-tool
+MUSICBRAINZ=./abcde-musicbrainz-tool
 EJECT=eject
 MD5SUM=md5sum
 DISTMP3=distmp3

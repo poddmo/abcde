@@ -77,7 +77,9 @@ if ($command =~ m/^id/) {
           $i <= $disc->last_track_num; $i++ ) {
         printf("%d ", $disc->track_offset($i));
     }
-    printf("%d\n", $disc->sectors() / $FRAMES_PER_S);
+    printf("%d ", $disc->sectors() / $FRAMES_PER_S);
+    my $url = $disc->submission_url();
+    printf("%s\n", $url);
     undef $disc;
 } elsif ($command =~ m/data/) {
     if (!defined $discid or !$discid) {

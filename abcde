@@ -3472,7 +3472,7 @@ do_getalbumart()
 					MBID=$(cat "${ABCDETEMPDIR}/mbid.$(checkstatus cddb-choice)")
 					vecho "trying to get cover from coverartarchive.org with musicbrainz mbid $MBID" >&2
 					ALBUMARTURL="https://coverartarchive.org/release/$MBID/front"
-					vecho "cover URL: $ALBUMARTURL" >&2
+					vvecho "cover URL: $ALBUMARTURL" >&2
 					$HTTPGET "$ALBUMARTURL" > "${ABCDETEMPDIR}/$ALBUMARTFILE"
 					if [ $? -ne 0 ]; then
 						vecho "could not download cover from musicbrainz" >&2
@@ -3514,6 +3514,7 @@ do_getalbumart()
 			fi
 		fi
 		if [ "$INTERACTIVE" = "y" ]; then
+			vvecho beginning of interactive cover art selection >&2
 			if [ -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
 				do_identifyart "${ABCDETEMPDIR}/$ALBUMARTFILE"
 				do_displayart "${ABCDETEMPDIR}/$ALBUMARTFILE"
@@ -3533,7 +3534,11 @@ do_getalbumart()
 					read YESNO
 				done
 				if [ "$YESNO" = "y" ] || [ "$YESNO" = "Y" ]; then
-					# look for local album art
+				    vvecho Begin override cover art selection loop >&2
+				    while :
+				    do
+					vecho "Configured default location for cover art is: ${ALBUMARTDIR}/${ALBUMARTFILE}" >&2
+					# look for local album art at the configured default location
 					if [ -s "${ALBUMARTDIR}/${ALBUMARTFILE}" ]; then
 						echo Local cover art found at "${ALBUMARTDIR}/${ALBUMARTFILE}"  >&2
 						do_identifyart "${ALBUMARTDIR}/$ALBUMARTFILE"
@@ -3548,28 +3553,47 @@ do_getalbumart()
 						done
 						if [ "$YESNO" = "y" ] || [ "$YESNO" = "Y" ] || [ "$YESNO" = "" ]; then
 							cp "${ALBUMARTDIR}/${ALBUMARTFILE}" "${ABCDETEMPDIR}/${ALBUMARTFILE}"
-							if [ ! -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
+							RETURN=$?
+							if [ "$RETURN" != "0" ]; then
                                                 		vecho "unable to copy ${ALBUMARTDIR}/${ALBUMARTFILE} to ${ABCDETEMPDIR}/{$ALBUMARTFILE}" >&2
+                                                	else
+								vecho Cover art copied successfully >&2
+                                                		break
                                                 	fi
-                                                else
-							# manually specify location of album art
-							echo -n "Enter URL or local path (ENTER to cancel) :" >&2
-							read ALBUMARTURL
-							if [ ! -z "$ALBUMARTURL" ]; then
-								if [[ ${ALBUMARTURL} =~ (https?|ftp|file)://.* ]]; then
-									$HTTPGET "$ALBUMARTURL" > "${ABCDETEMPDIR}/$ALBUMARTFILE"
-									if [ ! -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
-										vecho "unable to download $ALBUMARTURL" >&2
-									fi
-								else # it's a local path
-									cp "$ALBUMARTURL" "${ABCDETEMPDIR}/$ALBUMARTFILE"
-									if [ ! -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
-										vecho "unable to copy $ALBUMARTURL to ${ABCDETEMPDIR}/$ALBUMARTFILE" >&2
-									fi
-								fi
+                                                fi
+                                        fi
+					vecho Manually specify location of album art >&2
+					echo -n "Enter URL or local path (ENTER to cancel) :" >&2
+					read ALBUMARTURL
+					if [ ! -z "$ALBUMARTURL" ]; then
+						if [[ ${ALBUMARTURL} =~ (https?|ftp|file)://.* ]]; then
+							$HTTPGET "$ALBUMARTURL" > "${ABCDETEMPDIR}/$ALBUMARTFILE"
+							RETURN=$?
+                                                        if [ "$RETURN" != "0" ] || [ ! -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
+								vecho "unable to download $ALBUMARTURL" >&2
+							else
+								break
+							fi
+						else # it's a local path
+							cp "$ALBUMARTURL" "${ABCDETEMPDIR}/$ALBUMARTFILE"
+                                                        RETURN=$?
+                                                        if [ "$RETURN" != "0" ] || [ ! -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
+                                                        	vecho "unable to copy $ALBUMARTURL to ${ABCDETEMPDIR}/$ALBUMARTFILE" >&2
+                                                        else 
+                                                        	break
 							fi
 						fi
+					else
+						vecho Canceling art selection at user request >&2
+						## move any existing image 
+						if [ -s "${ABCDETEMPDIR}/${ALBUMARTFILE}" ]; then
+							mv "${ABCDETEMPDIR}/${ALBUMARTFILE}" "${ABCDETEMPDIR}/${ALBUMARTFILE}.rejected.jpg"
+						fi
+						break
 					fi
+				    vvecho bottom of cover art select loop
+				    done
+				vvecho End of interactive art selection
 				fi
 			fi
 		fi

@@ -1138,6 +1138,14 @@ do_tag ()
 					*=*) echo "$USERCOMMENT";;
 					*)   echo COMMENT="$USERCOMMENT";;
 				esac
+			# use the configuration file comment (COMMENT) for a FLAC comment tag
+			elif [ -n "$(eval echo '${COMMENT}')" ]; then
+				COMMENT="$(echo ${COMMENT} | munge_collapsewhitespace )"
+				vecho COMMENT is "${COMMENT}" >&2
+				case "$COMMENT" in
+					*=*) echo "$COMMENT";;
+					*)   echo COMMENT="$COMMENT";;
+				esac
 			fi
 			# use CDDB extended disc info for a FLAC comment tag
 			DISCCOMMENT="$(getcddbinfo DISC-INFO | munge_collapsewhitespace )"

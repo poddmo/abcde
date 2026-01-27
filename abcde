@@ -3619,15 +3619,15 @@ do_getalbumart()
 				# put cover in the same place as the album
 				if [ "$ONETRACK" = "y" ] ; then
 					if [ "$VARIOUSARTISTS" = "y" ] ; then
-						ALBUMARTDIR="$(eval echo "$VAONETRACKOUTPUTFORMAT")"
+						ALBUMARTDIR="$(eval echo \""$VAONETRACKOUTPUTFORMAT"\")"
 					else
-						ALBUMARTDIR="$(eval echo "$ONETRACKOUTPUTFORMAT")"
+						ALBUMARTDIR="$(eval echo \""$ONETRACKOUTPUTFORMAT"\")"
 					fi
 				else
 					if [ "$VARIOUSARTISTS" = "y" ] ; then
-						ALBUMARTDIR="$(eval echo "$VAOUTPUTFORMAT")"
+						ALBUMARTDIR="$(eval echo \""$VAOUTPUTFORMAT"\")"
 					else
-						ALBUMARTDIR="$(eval echo "$OUTPUTFORMAT")"
+						ALBUMARTDIR="$(eval echo \""$OUTPUTFORMAT"\")"
 					fi
 				fi
 				FINALALBUMARTDIR="$(dirname "$OUTPUTDIR/$ALBUMARTDIR")"

@@ -3557,7 +3557,7 @@ do_getalbumart()
 							if [ "$RETURN" != "0" ]; then
                                                 		vecho "unable to copy ${ALBUMARTDIR}/${ALBUMARTFILE} to ${ABCDETEMPDIR}/{$ALBUMARTFILE}" >&2
                                                 	else
-								vecho Cover art copied successfully >&2
+								vecho Local cover art copied to "${ABCDETEMPDIR}" >&2
                                                 		break
                                                 	fi
                                                 fi
@@ -3572,6 +3572,7 @@ do_getalbumart()
                                                         if [ "$RETURN" != "0" ] || [ ! -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
 								vecho "unable to download $ALBUMARTURL" >&2
 							else
+								vecho Cover art downloaded to "${ABCDETEMPDIR}/$ALBUMARTFILE"
 								break
 							fi
 						else # it's a local path
@@ -3580,6 +3581,7 @@ do_getalbumart()
                                                         if [ "$RETURN" != "0" ] || [ ! -s "${ABCDETEMPDIR}/$ALBUMARTFILE" ]; then
                                                         	vecho "unable to copy $ALBUMARTURL to ${ABCDETEMPDIR}/$ALBUMARTFILE" >&2
                                                         else 
+                                                        	vecho Local cover art copied to "${ABCDETEMPDIR}" >&2
                                                         	break
 							fi
 						fi

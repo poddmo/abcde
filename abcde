@@ -2903,7 +2903,7 @@ do_musicbrainz_read ()
                         [ ! -f "${ABCDETEMPDIR}/submiturl" ] && break
                         # Since the lookup failed and we have a URL, offer submitting
                         # the disc via that URL.
-                        echo -n "Submit via http [y/N]? " >&2
+                        echo -n "This disc is unknown to MusicBrainz. Submit via http [y/N]? " >&2
                         if [ "$INTERACTIVE" = "y" ]; then
                                 read ANSWER
                         else
@@ -2911,8 +2911,8 @@ do_musicbrainz_read ()
                                 ANSWER=n
                         fi
                         if [ "$ANSWER" = "y" ]; then
-                                echo "Visit $(<"${ABCDETEMPDIR}/submiturl")"
-                                echo -n "Then hit enter to retry lookup..."
+                                echo "Visit $(<"${ABCDETEMPDIR}/submiturl")" >&2
+                                echo -n "Then hit enter to retry lookup..." >&2
                                 read ANSWER
                                 ANSWER=
                         else

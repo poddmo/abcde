@@ -1,9 +1,9 @@
 # Introduction
 This is a fork of [abcde](https://abcde.einval.com/wiki/):
 > abcde version 2.9.3 is the most recent download and was released on February 5th 2019.
-The starting point for this repository was [2.9.4-DEV](https://git.einval.com/git/abcde.git) with the last commit dated 2021-02-14.
+The starting point for this GitHub repository was [2.9.4-DEV](https://git.einval.com/git/abcde.git) with the last commit dated 2021-02-14.
 
-I've ripped many hundreds of CD's with abcde and wanted to fix some bugs and have a go at some enhancements - now up to version 2.11.1 released on April 26th 2025.
+I've ripped many hundreds of CD's with abcde and wanted to fix some bugs and have a go at some enhancements - now up to version 2.12.0 released on 30th January, 2026.
 
 My ripping objective is to create lossless music tracks (flac) for listening and also to record as much information from the read process as possible for archival posterity, such as TOC, cue sheet, CD-TEXT, enhanced CD directory listing, media read progress/status/errors and metadata downloaded. Ideally the info should be stored in the audio file metadata.
 
@@ -39,6 +39,7 @@ Your feedback is very welcome. Please open an issue or pull request and I will l
 - Create new config option FLACTAGSTARTCASE to use munge_Startcase for FLAC tags artist name, album title and track titles
   - This helps to prevent artist duplication due to inconsistent capitalisation
 - Read hidden track one audio tracks, if they exist
+- Enhanced whole disk flac archives with hidden track one audio and cue sheet with track titles.
 
 ## Todo
 - improve the diff display: show cddb entry number and source (ie musicbrainz, cddb, cd-text, local) in the header
@@ -51,27 +52,25 @@ Your feedback is very welcome. Please open an issue or pull request and I will l
 - add a new playlist option: `s` sort. Keep the existing playlist, append the new tracks, sort numerically, replace the existing playlist with the new sorted playlist. This new option will permit ripping discs in sets in any order and in parallel. Currently discs in sets need to be ripped sequentially for the generated playlist to make sense.
 
 # Known issues
-- tested only with flac encoding
-- one-track flacs: embedded cue sheet does not include track titles (pre-existing issue)
-- not patched or tested for genre issues
+- tested primarily with flac encoding
 
 # Installation
 - Download the latest package or source code from: https://github.com/poddmo/abcde/releases/latest
 ## Package Installation
 ```
-wget https://github.com/poddmo/abcde/releases/download/2.11.1/abcde_2.11.1-1_all.deb
-dpkg -i abcde_2.11.1-1_all.deb
+wget https://github.com/poddmo/abcde/releases/download/2.12.0/abcde_2.12.0-1_all.deb
+dpkg -i abcde_2.12.0-1_all.deb
 ```
 
 ## Source Installation
 Download the source, extract it, create a package from it and then install your fresh package:
 ```
-wget -O abcde_2.11.1.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.11.1.tar.gz
-tar zxf abcde_2.11.1.tar.gz
-cd abcde-2.11.1
+wget -O abcde_2.12.0.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.12.0.tar.gz
+tar zxf abcde_2.12.0.tar.gz
+cd abcde-2.12.0
 dpkg-buildpackage -us -uc --build=binary
 cd ..
-dpkg -i abcde_2.11.1-1_all.deb
+dpkg -i abcde_2.12.0-1_all.deb
 ```
 
 # Testing

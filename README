@@ -25,7 +25,12 @@ for more help.
 MAJOR CHANGES
 =============
 
-(see changelog for more details)
+(See https://github.com/poddmo/abcde for complete details)
+
+
+abcde 2.12.0
+ * Various bug fixes and improvements, especially for wholedisk flacs
+ * Generate a MusicBrainz URL to submit unknown discs
 
 Changes in 2.11.1
 * New feature: read Hidden Track One Audio if found
@@ -64,6 +69,8 @@ Changes in 2.10-RC1
   * Create new config option FLACTAGSTARTCASE to use munge_Startcase for
     FLAC tags artist name, album title and track titles. This helps to 
     prevent artist duplication due to inconsistent capitalisation
+
+(see changelog for more details)
 
 Changes in 2.9.4
 * ...

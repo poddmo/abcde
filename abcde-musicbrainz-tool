@@ -19,6 +19,7 @@ use MusicBrainz::DiscID;
 use WebService::MusicBrainz 1.0.4;
 use Getopt::Long;
 use Pod::Usage;
+use List::UtilsBy qw(max_by);
 
 my $FRAMES_PER_S = 75;
 
@@ -153,6 +154,8 @@ if ($command =~ m/^id/) {
 
 	    # Only consider the first medium
 	    my $medium = @mediums[0];
+	    my $position = $medium->{'position'};
+	    my $max_pos = (max_by { $_->{'position'} } @{$release->{'media'}})->{'position'};
 	    my @tracks = @{ $medium->{'tracks'} };
 
 	    my $total_len = 0;
@@ -169,7 +172,7 @@ if ($command =~ m/^id/) {
 	    print OUT "#blues,classical,country,data,folk,jazz,newage,reggae,rock,soundtrack,misc\n";
 	    print OUT "#CATEGORY=none\n";
 	    print OUT "DISCID=" . $discid . "\n";
-	    print OUT "DTITLE=" . $a_artist. " / " . $release->{'title'} . "\n";
+	    print OUT "DTITLE=" . $a_artist. " / " . $release->{'title'} . ( $max_pos > 1 ? " Disc " . $position . " of " . $max_pos : "") . "\n";
 	    print OUT "DYEAR=" . $rel_year . "\n";
 	    print OUT "DGENRE=\n";        
 

@@ -3111,6 +3111,16 @@ do_cddb_read ()
 	fi
 }
 
+do_multidisc() {
+    CDDBDATA="${ABCDETEMPDIR}/cddbread.$(checkstatus cddb-choice)"
+    MULTIDISC_INFO="${ABCDETEMPDIR}/multidisc.$(checkstatus cddb-choice)"
+    if [[ -e "$MULTIDISC_INFO" ]]; then
+        local disc_position disc_count
+        read -r disc_position disc_count < "$MULTIDISC_INFO"
+        sed -i "s/^DTITLE=.*/& Disc $disc_position of $disc_count/" "$CDDBDATA"
+    fi
+}
+
 # do_cddbedit
 do_cddbedit ()
 {
@@ -3255,6 +3265,10 @@ do_cddbedit ()
 	fi
 	CDDBDATA="${ABCDETEMPDIR}/cddbread.$(checkstatus cddb-choice)"
 	CDDBSOURCE=$(cat "${ABCDETEMPDIR}/datasource.$(checkstatus cddb-choice)")
+
+    # TODO make this conditional on a configuration option
+    do_multidisc
+
 	echo -n "Edit selected CDDB data " >&2
 	if [ "$INTERACTIVE" = "y" ]; then
 		if [ "$UNKNOWNDISK" = "y" ]; then
@@ -5525,6 +5539,8 @@ if [ "$DOCDDB" = "y" ]; then
 			fi
 		fi
 	fi
+
+
 	do_cddbedit
 
 	eval "$($CDDBTOOL parse "$CDDBDATA")"

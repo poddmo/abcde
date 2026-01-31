@@ -58,8 +58,8 @@ Your feedback is very welcome. Please open an issue or pull request and I will l
 - Download the latest package or source code from: https://github.com/poddmo/abcde/releases/latest
 ## Package Installation
 ```
-wget https://github.com/poddmo/abcde/releases/download/2.12.0/abcde_2.12.0-1_all.deb
-dpkg -i abcde_2.12.0-1_all.deb
+wget https://github.com/poddmo/abcde/releases/download/2.12.0/abcde_2.12.0-2_all.deb
+dpkg -i abcde_2.12.0-2_all.deb
 ```
 
 ## Source Installation
@@ -70,7 +70,7 @@ tar zxf abcde_2.12.0.tar.gz
 cd abcde-2.12.0
 dpkg-buildpackage -us -uc --build=binary
 cd ..
-dpkg -i abcde_2.12.0-1_all.deb
+dpkg -i abcde_2.12.0-2_all.deb
 ```
 
 # Testing

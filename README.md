@@ -5,19 +5,11 @@ The starting point for this GitHub repository was [2.9.4-DEV](https://git.einval
 
 I've ripped many hundreds of CD's with abcde and wanted to fix some bugs and have a go at some enhancements - now up to version 2.12.0 released on 30th January, 2026.
 
-My ripping objective is to create lossless music tracks (flac) for listening and also to record as much information from the read process as possible for archival posterity, such as TOC, cue sheet, CD-TEXT, enhanced CD directory listing, media read progress/status/errors and metadata downloaded. Ideally the info should be stored in the audio file metadata.
+My objective is to create music tracks, especially lossless flacs, for listening and also to record as much information from the read process as possible for archival posterity, such as TOC, cue sheet, CD-TEXT, enhanced CD directory listing, media read progress/status/errors and metadata downloaded. Ideally the info should be stored in the audio file metadata. It is still possible to read once and output to several music file formats but I mostly focus on flac.
 
 Your feedback is very welcome. Please open an issue or pull request and I will look at it.
 
 # Features
-- applied many patches from bug reports: https://abcde.einval.com/bugzilla/query.cgi
-- applied many patches from the mailing list: https://lists.einval.com/cgi-bin/mailman/listinfo/abcde-users
-  - rip one track CDs
-  - show release year in cddb choices
-  - provide help option in cddb choices
-    - explain how to diff
-    - provide option to re-list choices
-
 ## Enhancements
 - Improved handling of CD sets:
   - The -W option is expanded to optionally add the total number of discs in the set. These details are recorded in the FLAC metadata tags DISCNUMBER and DISCTOTAL
@@ -40,37 +32,86 @@ Your feedback is very welcome. Please open an issue or pull request and I will l
   - This helps to prevent artist duplication due to inconsistent capitalisation
 - Read hidden track one audio tracks, if they exist
 - Enhanced whole disk flac archives with hidden track one audio and cue sheet with track titles.
+  - Whole disk flac archives are now a format of focus due to their ability to capture an entire album and all the metadata in a single file. Additionally, more music players are able to handle them correctly.
+- Generate a MusicBrainz URL that can be used to submit CD Table of Contents (TOC) if they are not found during the lookup
+- Album art selection and handling improvements
+
+## Bug fixes, patches and pull requests
+- applied many patches from GitHub issues and pull requests
+- applied many patches from bug reports: https://abcde.einval.com/bugzilla/query.cgi
+- applied many patches from the mailing list: https://lists.einval.com/cgi-bin/mailman/listinfo/abcde-users
+  - rip one track CDs
+  - show release year in cddb choices
+  - provide help option in cddb choices
+    - explain how to diff
+    - provide option to re-list choices
 
 ## Todo
-- improve the diff display: show cddb entry number and source (ie musicbrainz, cddb, cd-text, local) in the header
-- highlight CDDB entries with extended info and provide a way to view it
-- make the CDDB entry choice prompt for locally cached (line ~2618) the same as in do_cddbedit (line ~3031)
+- Move these Todo items from here to enhancement Issues
+- Improve CDDB selection dialogue:
+  - improve the diff display: show cddb entry number and source (ie musicbrainz, cddb, cd-text, local) in the header
+  - highlight CDDB entries with extended info and provide a way to view it
+  - make the CDDB entry choice prompt for locally cached (line ~2618) the same as in do_cddbedit (line ~3031)
   - add `q` quit immediately and `x` exit cleanly options
 - archive metadata action
-- create a completion report a la rubyrip that shows if any tracks have read errors (adding the `-l` option to cdparanoia logs the progress bar that can be used for analysis and reporting)
+  - log the output of the ripping utility (cdparanoia)
+  - create a completion report a la rubyrip that shows if any tracks have read errors (adding the `-l` option to cdparanoia logs the progress bar that can be used for analysis and reporting)
 - FLACTAGSTARTCASE and SIMPLIFYPUNCTUATION should probably apply globally to tags and names
-- add a new playlist option: `s` sort. Keep the existing playlist, append the new tracks, sort numerically, replace the existing playlist with the new sorted playlist. This new option will permit ripping discs in sets in any order and in parallel. Currently discs in sets need to be ripped sequentially for the generated playlist to make sense.
+- review playlist generation
+  - add a new playlist option: `s` sort. Keep the existing playlist, append the new tracks, sort numerically, replace the existing playlist with the new sorted playlist. This new option will permit ripping discs in sets in any order and in parallel. Currently discs in sets need to be ripped sequentially for the generated playlist to make sense.
+  - or just make a new playlist every time from the files in the directory sorted numerically - this makes most sense and represents current on-disk truth
 
 # Known issues
 - tested primarily with flac encoding
 
-# Installation
-- Download the latest package or source code from: https://github.com/poddmo/abcde/releases/latest
-## Package Installation
+# Installation Instructions
+- The latest package or source code can be found here: https://github.com/poddmo/abcde/releases/latest
+- See the [Testing section](https://github.com/poddmo/abcde?tab=readme-ov-file#testing) below for configuration file and command line examples
+
+## Debian-based systems
+- These instructions are for Debian, Ubuntu, Mint, Pop OS, Raspberry Pi OS and other Debian or Ubuntu-derived Linux distributions:
+  - https://en.wikipedia.org/wiki/Category:Debian-based_distributions
+  - https://en.wikipedia.org/wiki/Category:Ubuntu_derivatives
+
+### Package Installation
+Install the distribution version of abcde first to pull in the recommended dependencies and be set up for converting to flac and mp3:
+```
+sudo apt install abcde flac eject eyed3
+```
+Then install my latest updated version from the github repo with all the bug fixes, workflow and metadata improvements:
 ```
 wget https://github.com/poddmo/abcde/releases/download/2.12.0/abcde_2.12.0-2_all.deb
-dpkg -i abcde_2.12.0-2_all.deb
+sudo dpkg -i abcde_2.12.0-2_all.deb
 ```
 
-## Source Installation
-Download the source, extract it, create a package from it and then install your fresh package:
+### Build the package from source
+Download the source, extract it, create a package from it and then install the fresh package:
 ```
 wget -O abcde_2.12.0.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.12.0.tar.gz
 tar zxf abcde_2.12.0.tar.gz
 cd abcde-2.12.0
 dpkg-buildpackage -us -uc --build=binary
 cd ..
-dpkg -i abcde_2.12.0-2_all.deb
+sudo dpkg -i abcde_2.12.0-2_all.deb
+```
+
+## Red Hat-based Distributions
+Sorry we don't have a package or specific instructions yet. If you're handy at building rpm packages, a pull request would be greatly appreciated by this Debian-derived bloke.
+
+## Install from source
+```
+wget -O abcde_2.12.0.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.12.0.tar.gz
+tar zxf abcde_2.12.0.tar.gz
+cd abcde-2.12.0
+chmod 755 abcde abcde-musicbrainz-tool cddb-tool
+sudo cp abcde abcde-musicbrainz-tool cddb-tool /usr/local/bin
+sudo cp abcde.1 cddb-tool.1 /usr/local/share/man/man1/
+```
+There will be dependencies that you will need to satisfy so I suggest to begin trying to rip a CD and install those that make themselves known. For reference, these are the dependency details from the Debian package configuration:
+```
+Depends: cd-discid, wget, cdparanoia | icedax, vorbis-tools (>= 1.0beta4-1) | lame | flac | speex | musepack-tools | opus-tools, libmusicbrainz-discid-perl, libwebservice-musicbrainz-perl (>= 1.0.4-1.1), sensible-utils
+Recommends: vorbis-tools, libdigest-sha-perl, bsd-mailx, glyrc, imagemagick
+Suggests: eject, distmp3, id3 (>= 0.12), id3v2, eyed3 (<< 0.7~), normalize-audio, vorbisgain, mkcue, mp3gain, atomicparsley
 ```
 
 # Testing
@@ -87,7 +128,7 @@ dpkg -i abcde_2.12.0-2_all.deb
 - Line 3: I only try to download albumart for the first disc in a set. Disc 2 of 2 (`-W 2,2`) is in my second optical drive (`-d /dev/sr1`)
 
 ## Config file
-This is my $HOME/.abcde.conf
+This is my `$HOME/.abcde.conf`:
 ```
 export LC_ALL=en_AU.UTF-8		# define locale
 READHIDDENTRACK=y

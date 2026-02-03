@@ -76,7 +76,7 @@ Your feedback is very welcome. Please open an issue or pull request and I will l
 ### Package Installation
 Install the distribution version of abcde first to pull in the recommended dependencies and be set up for converting to flac and mp3:
 ```
-sudo apt install abcde flac eject eyed3
+sudo apt install abcde flac eject eyed3 glyrc imagemagick
 ```
 Then install my latest updated version from the github repo with all the bug fixes, workflow and metadata improvements:
 ```
@@ -114,10 +114,23 @@ Recommends: vorbis-tools, libdigest-sha-perl, bsd-mailx, glyrc, imagemagick
 Suggests: eject, distmp3, id3 (>= 0.12), id3v2, eyed3 (<< 0.7~), normalize-audio, vorbisgain, mkcue, mp3gain, atomicparsley
 ```
 
-# Testing
-- OS: Ubuntu 22.04.4
-- Hardware: x64 with two SATA CDROMs
-## Example Command lines
+# Configuration
+- Configuration is a process you will refine over time as you rip more CDs and play the files on a variety of music players
+- I recommend to get started, just put a disc in your optical drive and type:
+```
+abcde -V -G -o flac -d /dev/sr0
+```
+This should rip a CD to flac and retrieve the cover art. Then you'll start to get an idea of what to set in the configuration file
+
+- I don't recommend using the system-wide configuration file: `/etc/abcde.conf`
+- Use the default per-user configuration: `$HOME/.abcde.conf` or specify your own configuration file location with the `-c` command line option
+- Use the system config file as a starting template:
+```
+cp /etc/abcde.conf $HOME/.abcde.conf
+```
+and look at my configuration file below.
+
+# Example Command lines
 ```
 (1) abcde -V -G -o flac -d /dev/sr0
 (2) abcde -V -G -o flac -d /dev/sr0 -W 1,2
@@ -127,7 +140,7 @@ Suggests: eject, distmp3, id3 (>= 0.12), id3v2, eyed3 (<< 0.7~), normalize-audio
 - Line 2: The CD in my first optical drive (`-d /dev/sr0`) is the first disc of a set (`-W 1,2`)
 - Line 3: I only try to download albumart for the first disc in a set. Disc 2 of 2 (`-W 2,2`) is in my second optical drive (`-d /dev/sr1`)
 
-## Config file
+# Config file example
 This is my `$HOME/.abcde.conf`:
 ```
 export LC_ALL=en_AU.UTF-8		# define locale

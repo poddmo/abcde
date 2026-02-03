@@ -4067,6 +4067,18 @@ post_encode ()
 :
 }
 
+parse_multidisc() {
+	local multidisc_info rest
+	multidisc_info="${ABCDETEMPDIR}/multidisc.$(checkstatus cddb-choice)"
+    if [[ -n "$AUTOMATIC_DISCNUMBER" && -e "$multidisc_info" ]]; then
+		read -r DISCNUMBER DISCTOTAL  < "$multidisc_info"
+		STARTTRACKNUMBER="${DISCNUMBER}$(printf "%02d" "${STARTTRACKNUMBER:-01}")"
+		STARTTRACKNUMBERTAG="y"
+        COMMENT="CD ${DISCNUMBER}/${DISCTOTAL}"
+	fi
+}
+
+
 ###############################################################################
 # End of functions
 #
@@ -4513,24 +4525,27 @@ while getopts 1a:bBc:C:d:DefgGhj:klLmMnNo:pPQ:r:s:S:t:T:UvVxX:w:W:z opt ; do
 		   ;;
 		W)
 		   re='^[0-9]+([,][0-9]+)?$'
-		   if ! [[ "${OPTARG}" =~ $re ]]; then 
-		   	log error 'Argument of -W must be discnumber[,disctotal]'
-                        exit 1
+           if [[ "${OPTARG}" =~ $re ]]; then 
+               DISCNUMBER=$( echo "$OPTARG" | cut -f1 -d',' )
+               DISCTOTAL=$( echo "$OPTARG" | cut -f2 -d',' -s )
+               if echo "${DISCTOTAL}" | grep "[[:digit:]]" > /dev/null 2>&1  ; then
+                   if [ $DISCNUMBER -gt $DISCTOTAL ]; then
+                       log error "discnumber (${DISCNUMBER}) cannot be higher than disctotal (${DISCTOTAL})"
+                       exit 1
                    fi
-		   DISCNUMBER=$( echo "$OPTARG" | cut -f1 -d',' )
-		   DISCTOTAL=$( echo "$OPTARG" | cut -f2 -d',' -s )
-		   if echo "${DISCTOTAL}" | grep "[[:digit:]]" > /dev/null 2>&1  ; then
-		   	if [ $DISCNUMBER -gt $DISCTOTAL ]; then
-		   		log error "discnumber (${DISCNUMBER}) cannot be higher than disctotal (${DISCTOTAL})"
-		   		exit 1
-		   	fi
-		   	COMMENT="CD ${DISCNUMBER}/${DISCTOTAL}"
-		   else
-		   	COMMENT="CD ${DISCNUMBER}"
-		   fi
-		   STARTTRACKNUMBER="${DISCNUMBER}$(printf "%02d" "${STARTTRACKNUMBER:-01}")"
-		   STARTTRACKNUMBERTAG="y"
-		   vecho Comment is "${COMMENT}" >&2
+                   COMMENT="CD ${DISCNUMBER}/${DISCTOTAL}"
+               else
+                   COMMENT="CD ${DISCNUMBER}"
+               fi
+               STARTTRACKNUMBER="${DISCNUMBER}$(printf "%02d" "${STARTTRACKNUMBER:-01}")"
+               STARTTRACKNUMBERTAG="y"
+               vecho Comment is "${COMMENT}" >&2
+           elif [[ "$OPTARG" = auto ]]; then
+               AUTOMATIC_DISCNUMBER=yes
+           else
+               log error 'Argument of -W must be discnumber[,disctotal] or "auto"'
+               exit 1
+           fi
 		   ;;
 		z) DEBUG=y ; CDROMREADERSYNTAX=debug ; EJECTCD="n" ;;
 		?) usage; exit ;;
@@ -5528,6 +5543,8 @@ if [ "$DOCDDB" = "y" ]; then
 	do_cddbedit
 
 	eval "$($CDDBTOOL parse "$CDDBDATA")"
+
+    parse_multidisc
 fi
 
 # Before reading tracks, we set the speed of the device

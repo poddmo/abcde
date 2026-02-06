@@ -3,7 +3,7 @@ This is a fork of [abcde](https://abcde.einval.com/wiki/):
 > abcde version 2.9.3 is the most recent download and was released on February 5th 2019.
 The starting point for this GitHub repository was [2.9.4-DEV](https://git.einval.com/git/abcde.git) with the last commit dated 2021-02-14.
 
-I've ripped many hundreds of CD's with abcde and wanted to fix some bugs and have a go at some enhancements - now up to version 2.12.0 released on 30th January, 2026.
+I've ripped many hundreds of CD's with abcde and wanted to fix some bugs and have a go at some enhancements - now up to version 2.12.1 released on 6th February, 2026.
 
 My objective is to create music tracks, especially lossless flacs, for listening and also to record as much information from the read process as possible for archival posterity, such as TOC, cue sheet, CD-TEXT, enhanced CD directory listing, media read progress/status/errors and metadata downloaded. Ideally the info should be stored in the audio file metadata. It is still possible to read once and output to several music file formats but I mostly focus on flac.
 
@@ -80,19 +80,19 @@ sudo apt install abcde flac eject eyed3 glyrc imagemagick
 ```
 Then install my latest updated version from the github repo with all the bug fixes, workflow and metadata improvements:
 ```
-wget https://github.com/poddmo/abcde/releases/download/2.12.0/abcde_2.12.0-2_all.deb
-sudo dpkg -i abcde_2.12.0-2_all.deb
+wget https://github.com/poddmo/abcde/releases/download/2.12.1/abcde_2.12.1-1_all.deb
+sudo dpkg -i abcde_2.12.1-1_all.deb
 ```
 
 ### Build the package from source
 Download the source, extract it, create a package from it and then install the fresh package:
 ```
-wget -O abcde_2.12.0.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.12.0.tar.gz
-tar zxf abcde_2.12.0.tar.gz
-cd abcde-2.12.0
+wget -O abcde_2.12.1.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.12.1.tar.gz
+tar zxf abcde_2.12.1.tar.gz
+cd abcde-2.12.1
 dpkg-buildpackage -us -uc --build=binary
 cd ..
-sudo dpkg -i abcde_2.12.0-2_all.deb
+sudo dpkg -i abcde_2.12.1-1_all.deb
 ```
 
 ## Red Hat-based Distributions
@@ -100,9 +100,9 @@ Sorry we don't have a package or specific instructions yet. If you're handy at b
 
 ## Install from source
 ```
-wget -O abcde_2.12.0.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.12.0.tar.gz
-tar zxf abcde_2.12.0.tar.gz
-cd abcde-2.12.0
+wget -O abcde_2.12.1.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.12.1.tar.gz
+tar zxf abcde_2.12.1.tar.gz
+cd abcde-2.12.1
 chmod 755 abcde abcde-musicbrainz-tool cddb-tool
 sudo cp abcde abcde-musicbrainz-tool cddb-tool /usr/local/bin
 sudo cp abcde.1 cddb-tool.1 /usr/local/share/man/man1/

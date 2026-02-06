@@ -1,3 +1,8 @@
+abcde 2.12.1
+ * Add discnumber to onetrack filename
+
+ -- poddmo <https://github.com/poddmo/abcde> Fri, 06 Feb 2026 11:00:00
+
 abcde 2.12.0
  * Various bug fixes and improvements, especially for wholedisk flacs
  * Generate a MusicBrainz URL to submit unknown discs

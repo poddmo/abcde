@@ -28,9 +28,10 @@ MAJOR CHANGES
 (See https://github.com/poddmo/abcde for complete details)
 
 
-abcde 2.12.0
+abcde 2.12
  * Various bug fixes and improvements, especially for wholedisk flacs
  * Generate a MusicBrainz URL to submit unknown discs
+ * Add discnumber to onetrack filename
 
 Changes in 2.11.1
 * New feature: read Hidden Track One Audio if found

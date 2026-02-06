@@ -1130,6 +1130,15 @@ do_tag ()
 				echo DISCTOTAL="${DISCTOTAL}"
 			fi
 			echo CDDB="${CDDBDISCID}"
+			# use the MusicBrainz IDs for tags
+			if [ -n "${MBDISCID}" ]; then
+				echo MUSICBRAINZ_DISCID="${MBDISCID}"
+			fi
+			if [ -s "${ABCDETEMPDIR}/mbid.$(checkstatus cddb-choice)" ]; then
+				MBID=$(cat "${ABCDETEMPDIR}/mbid.$(checkstatus cddb-choice)")
+				vecho MBID is "${MBID}" >&2
+				echo MUSICBRAINZ_ALBUMID="${MBID}"
+			fi
 			# use the command line comment (-w) for a FLAC comment tag
 			if [ -n "$(eval echo '${USERCOMMENT}')" ]; then
 				USERCOMMENT="$(echo ${USERCOMMENT} | munge_collapsewhitespace )"

@@ -80,8 +80,8 @@ sudo apt install abcde flac eject eyed3 glyrc imagemagick
 ```
 Then install my latest updated version from the github repo with all the bug fixes, workflow and metadata improvements:
 ```
-wget https://github.com/poddmo/abcde/releases/download/2.12.1/abcde_2.12.1-1_all.deb
-sudo dpkg -i abcde_2.12.1-1_all.deb
+wget https://github.com/poddmo/abcde/releases/download/2.12.1/abcde_2.12.1-2_all.deb
+sudo dpkg -i abcde_2.12.1-2_all.deb
 ```
 
 ### Build the package from source
@@ -92,7 +92,7 @@ tar zxf abcde_2.12.1.tar.gz
 cd abcde-2.12.1
 dpkg-buildpackage -us -uc --build=binary
 cd ..
-sudo dpkg -i abcde_2.12.1-1_all.deb
+sudo dpkg -i abcde_2.12.1-2_all.deb
 ```
 
 ## Red Hat-based Distributions

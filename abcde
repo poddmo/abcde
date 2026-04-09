@@ -4,6 +4,7 @@
 # Copyright (c) 2009-2012 Colin Tuckley <colint@debian.org>
 # Copyright (c) 2012-2019 Steve McIntyre <93sam@@debian.org>
 # Copyright (c) 2015-2017 Andrew Strong <andrew.david.strong@gmail.com>
+# Copyright (c) 2024-2026 poddmo <https://github.com/poddmo/abcde>
 # This code is hereby licensed for public consumption under either the
 # GNU GPL v2 or greater, or Larry Wall's Artistic license - your choice.
 #
@@ -11,7 +12,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-VERSION='2.12.1'
+VERSION='2.12.2-DEV'
 
 usage ()
 {

@@ -763,7 +763,7 @@ splitvarious ()
 			;;
 		esac
 	elif [ "$VARIOUSARTISTS" = "y" ] && [ "$ONETRACK" = "y" ]; then
-		TRACKARTIST="Various"
+		TRACKARTIST="Various Artists"
 	else
 		TRACKARTIST="$DARTIST"
 	fi
@@ -2577,6 +2577,7 @@ do_discid ()
 
 # do_cleancue
 # Create a proper CUE file based on the CUE file we created before.
+# This function is called when tag action is enabled.
 do_cleancue()
 {
 	if CUEFILE_IN="${ABCDETEMPDIR}"/$(checkstatus cuefile); then
@@ -2587,7 +2588,12 @@ do_cleancue()
 			# FIXME It doesn't preserve spaces! Why?
 			# FIXME parse $track into PERFORMER and TITLE - abcde already has code for this?
 			n=1
-			echo "PERFORMER \"$DARTIST\"" >> "$CUEFILE_OUT"
+			if [ "$VARIOUSARTISTS" = "y" ]; then
+				PERFORMER='Various Artists'
+			else
+				PERFORMER="$DARTIST"
+			fi
+			echo "PERFORMER \"$PERFORMER\"" >> "$CUEFILE_OUT"
 			echo "TITLE \"$DALBUM\"" >> "$CUEFILE_OUT"
 			# Set IFS to <newline> to prevent read from swallowing spaces and tabs
 			OIFS="$IFS"
@@ -2599,9 +2605,52 @@ do_cleancue()
 # FIXME # Possible patch: remove the line above, uncomment the 2 lines below.
 #				echo "$line" >> "$CUEFILE_OUT"
 #				if echo "$line" | grep "^[[:space:]]*TRACK" > /dev/null 2>&1 ; then
-					eval track="\$TRACK$n"
+					eval TRACKTITLE="\$TRACK$n"
 					n=$(( $n + 1 ))
-					echo "    TITLE \"$track\"" >> "$CUEFILE_OUT"
+					if [ "$VARIOUSARTISTS" = "y" ]; then
+						# shamefully duplicated from splitvarious ()
+						case "$VARIOUSARTISTSTYLE" in
+					                forward)
+					                        DTITLEARTIST="$(echo "$TRACKTITLE" | sed 's- / -~-g')"
+								TRACKARTIST="$(echo "$DTITLEARTIST" | cut -f1 -d~)"
+								TRACKNAME="$(echo "$DTITLEARTIST" | cut -f2 -d~)"
+								;;
+							forward-dash)
+								DTITLEARTIST="$(echo "$TRACKTITLE" | sed 's, - ,~,g')"
+								TRACKARTIST="$(echo "$DTITLEARTIST" | cut -f1 -d~)"
+								TRACKNAME="$(echo "$DTITLEARTIST" | cut -f2 -d~)"
+								;;
+							reverse)
+								DTITLEARTIST="$(echo "$TRACKTITLE" | sed 's- / -~-g')"
+								TRACKARTIST="$(echo "$DTITLEARTIST" | cut -f2 -d~)"
+								TRACKNAME="$(echo "$DTITLEARTIST" | cut -f1 -d~)"
+								;;
+							reverse-dash)
+								DTITLEARTIST="$(echo "$TRACKTITLE" | sed 's, - ,~,g')"
+								TRACKARTIST="$(echo "$DTITLEARTIST" | cut -f2 -d~)"
+								TRACKNAME="$(echo "$DTITLEARTIST" | cut -f1 -d~)"
+								;;
+							colon)
+								DTITLEARTIST="$(echo "$TRACKTITLE" | sed 's-: -~-g')"
+								TRACKARTIST="$(echo "$DTITLEARTIST" | cut -f1 -d~)"
+								TRACKNAME="$(echo "$DTITLEARTIST" | cut -f2 -d~)"
+								;;
+							trailing-paren)
+								DTITLEARTIST="$(echo "$TRACKTITLE" | sed 's,^\(.*\) (\(.*\)),\1~\2,')"
+								TRACKARTIST="$(echo "$DTITLEARTIST" | cut -f2 -d~)"
+								TRACKNAME="$(echo "$DTITLEARTIST" | cut -f1 -d~)"
+								;;
+							esac
+
+						TRACKPERFORMER="$(mungeartistname "$TRACKARTIST")"
+						TRACKTITLE="$(mungetrackname "$TRACKNAME")"
+					else
+						TRACKPERFORMER="$PERFORMER"
+					fi
+					# Track title
+					echo "    TITLE \"$TRACKTITLE\"" >> "$CUEFILE_OUT"
+					# Track performer
+					echo "    PERFORMER \"${TRACKPERFORMER}\"" >> "$CUEFILE_OUT"
 				# When making a single-track rip, put the
 				# actual file name into the file declaration
 				# in the cue file so that it is usable by

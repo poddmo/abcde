@@ -4135,10 +4135,10 @@ post_encode ()
 # Builtin defaults
 
 # CDDB
-# Currently three supported options ("musicbrainz", "cddb" for freedb.org and "cdtext")
+# Currently three supported options ("musicbrainz", "cddb" for gnudb.org and "cdtext")
 CDDBMETHOD=musicbrainz
-CDDBURL="http://freedb.freedb.org/~cddb/cddb.cgi"
-CDDBSUBMIT=freedb-submit@freedb.org
+CDDBURL="http://gnudb.gnudb.org/~cddb/cddb.cgi"
+CDDBSUBMIT=submit@gnudb.org
 CDDBPROTO=6
 HELLOINFO="$(whoami)@$(hostname)"
 CDDBCOPYLOCAL="n"

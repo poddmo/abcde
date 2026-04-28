@@ -1,4 +1,4 @@
-.TH abcde 1 "6 February 2026" "abcde 2.12.1"
+.TH abcde 1 "28 April 2026" "abcde 2.12.2-DEV"
 .SH NAME
 abcde \- Grab an entire CD and compress it to Ogg/Vorbis, MP3, FLAC, Ogg/Speex, AAC, 
 WavPack, Monkey's Audio (ape), MPP/MP+(Musepack), True Audio (tta), MP2 format
@@ -280,6 +280,7 @@ described below. The "musicbrainz" value uses the Perl helper script
 \fBabcde-musicbrainz-tool\fR to establish a conversation with the
 Musicbrainz server for information retrieval. "cdtext" needs "icedax"
 or "cdda2wav" to be installed.
+See also \fBmungecddb\fR below for postprocessing retrieved entries.
 .TP
 .B CDDBURL
 Specifies a server to use for CDDB lookups.
@@ -399,7 +400,7 @@ ATM.
 .TP
 .B CDROMREADERSYNTAX
 Specifies the style of cdrom reader to use. Valid options are \'cdparanoia\',
-\'libcdio'\, \'debug\' and \'flac\'. It is used for querying the CDROM and 
+\'libcdio\', \'debug\' and \'flac\'. It is used for querying the CDROM and 
 obtain a list of valid tracks and DATA tracks. The special \'flac\' case is u
 sed to "rip" CD tracks from a single-track flac file.
 .TP
@@ -608,6 +609,13 @@ mungegenre () is a shell function used to modify the $GENRE variable. As
 a default action, it takes $GENRE as $1 and outputs the resulting value
 to stdout converting all UPPERCASE characters to lowercase.
 .TP
+.B mungecddb
+mungecddb() is a shell function used to standardise the entries returned
+from the CDDB lookups. This is especially useful for normalising
+capitalisation and punctuation from different sources and different authors.
+This function is applied immediately after CDDB retrieval so it precedes the
+other munge functions.
+.TP
 .B munge_fs-safe
 munge helper function to remove characters that are not file-system safe or sane
 for Windows or Linux.
@@ -763,10 +771,9 @@ ImageMagick package should be installed.
 .SH DATA FORMATS
 The CDDB metadata format is used a lot by abcde, both for lookups and
 internally. It's documented online at
-\%http://ftp.freedb.org/pub/freedb/latest/DBFORMAT
+\%https://gnudb.org/gnudbformat.php
 
 .SH FAQ
-
 .TP
 .B What is the odd-looking progress indicator when ripping?
 \fBcdparanoia\fR is the default ripping program used by abcde on many
@@ -777,12 +784,13 @@ man page for more details, or look online at
 \%https://www.xiph.org/paranoia/faq.html#progbar .
 
 .SH AUTHORS
+
 The main authors and maintainers have been Robert Woodcock
-\%<rcw@debian.org>, Jesus Climent \%<jesus.climent@hispalinux.es>,
-Colin Tuckley \%<colint@debian.org>, Steve McIntyre
-\%<93sam@debian.org>, Andrew Strong \%<andrew.david.strong@gmail.com>,
-and there have been lots of contributions from many others over the
-years.
+\%<rcw@debian.org>, Jesus Climent \%<jesus.climent@hispalinux.es>, Colin
+Tuckley \%<colint@debian.org>, Steve McIntyre \%<93sam@debian.org>, Andrew
+Strong \%<andrew.david.strong@gmail.com>, poddmo
+\%<https://github.com/poddmo/abcde> and there have been lots of
+contributions from many others over the years.
 
 If you're looking for help with abcde, the best place in the first
 instance is likely to be the mailing list:

@@ -449,7 +449,7 @@ munge_Startcase ()
 {
         # the first character is turned uppercase
         # each combination of space, full stop, ( or ) followed by any character is turned to uppercase
-        # each combination of hyphen followed by any character is turned to uppercase
+        # each combination of hyphen or equals followed by any character is turned to uppercase
         # each combination of space and apostrophe followed by any character is turned to uppercase
         # each combination of a digit followed by any character is turned to uppercase
         local line
@@ -457,7 +457,7 @@ munge_Startcase ()
         echo "$line" | \
         sed -e "s/\(^[a-z]\)/\U\1/g" \
             -e "s/\([\ \.\(\)][a-z]\)/\U\1/g" \
-            -e "s/\(\-[a-z]\)/\U\1/g" \
+            -e "s/\([\-\=][a-z]\)/\U\1/g" \
             -e "s/\( '[a-z]\)/\U\1/g" \
             -e "s/\([0-9][a-z]\)/\U\1/g"
 }
@@ -3170,6 +3170,40 @@ do_cddb_read ()
 	fi
 }
 
+# do_mungecddb
+# Pass the cddbread files through the mungecddb function
+# to normalise the data
+do_mungecddb ()
+{
+	num_musicbrainz=$(checkstatus "musicbrainz-entries")
+	num_cddb=$(checkstatus "cddb-entries")
+	num_cdtext=$(checkstatus "cdtext-entries")
+	NUM_RESPONSES=$(( num_musicbrainz + num_cddb + num_cdtext ))
+	if [ $NUM_RESPONSES -eq 0 ]; then
+		return
+	fi
+	vecho "Applying mungecddb to cddb entries" >&2
+	# for every cddbread file
+	for (( CDDBENTRY=1 ; CDDBENTRY<=$NUM_RESPONSES ; CDDBENTRY++ ))
+	do
+		# read lines of the file
+		cat "${ABCDETEMPDIR}/cddbread.$CDDBENTRY" | while read line
+		do
+			localtmpfile="${ABCDETEMPDIR}/cddbread.$CDDBENTRY.tmp"
+			# if the line begins with DTITLE, DGENRE or TTITLE
+			# pipe it to mungecddb
+			if echo "$line" | grep -qE '^DTITLE|^DGENRE|^TTITLE';
+			then
+				mungecddb "$line" >> "$localtmpfile"
+			else
+				echo "$line" >> "$localtmpfile"
+			fi
+		done
+		# move the updated temp file back
+		mv -f "${ABCDETEMPDIR}/cddbread.$CDDBENTRY.tmp" "${ABCDETEMPDIR}/cddbread.$CDDBENTRY"	
+	done
+}
+
 # do_cddbedit
 do_cddbedit ()
 {
@@ -4103,6 +4137,12 @@ mungealbumname ()
 mungegenre ()
 {
 	echo "$CDGENRE" | tr "[:upper:]" "[:lower:]"
+}
+
+# Custom cddb munging:
+mungecddb ()
+{
+	echo "$@"
 }
 
 # pre_read
@@ -5536,7 +5576,7 @@ if [ "$DOCDDB" = "y" ]; then
 			if [ $NUM_CDDB_MATCHES = 0 ]; then
 				# If we got no matches, we need to
 				# generate a blank CDDB template.
-				vecho "Unable to find any matches, generating unknown template."
+				vecho "Unable to find any matches, generating blank CDDB template."
 				echo "No lookup matches." >> "${ABCDETEMPDIR}/cddbchoices"
 				$CDDBTOOL template $(cat "${ABCDETEMPDIR}/cddbdiscid") > "${ABCDETEMPDIR}/cddbread.0"
 				echo "template" > "${ABCDETEMPDIR}/datasource.0"
@@ -5584,6 +5624,9 @@ if [ "$DOCDDB" = "y" ]; then
 			fi
 		fi
 	fi
+	# apply mungecddb to the retrieved cddb entries
+	do_mungecddb
+	# give the user a chance to choose and edit
 	do_cddbedit
 
 	eval "$($CDDBTOOL parse "$CDDBDATA")"

@@ -3361,11 +3361,6 @@ do_cddbedit ()
 		EDITCDDB=n
 	fi
 	if [ "$EDITCDDB" = "y" ]; then
-		if [ "$SIMPLIFYPUNCTUATION" = "y" ]; then
-			CDDBDATANEW="${CDDBDATA}.new"
-			cat "$CDDBDATA" | munge_simplify_punctuation > "$CDDBDATANEW"
-			CDDBDATA="$CDDBDATANEW"
-		fi
 		CDDBDATAMD5SUM=$($MD5SUM "$CDDBDATA" | cut -d " " -f 1);
 
 		# Use the debian sensible-editor wrapper to pick the editor that the
@@ -4414,9 +4409,6 @@ ALBUMARTFILE="cover.jpg"
 ALBUMARTDIR="${HOME}"
 ALBUMARTTYPE="JPEG"
 ALBUMARTALWAYSCONVERT="n"
-
-#unicode substitution tweaks
-SIMPLIFYPUNCTUATION="n"
 
 # Default to one process if -j isn't specified
 MAXPROCS=1

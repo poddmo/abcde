@@ -1097,15 +1097,9 @@ do_tag ()
 			;;
 		flac)
 			(
-			if [ "$FLACTAGSTARTCASE" = "y" ]; then
-				echo ARTIST="$( echo $TRACKARTIST | munge_Startcase )"
-				echo ALBUM="$( echo $DALBUM | munge_Startcase )"
-				echo TITLE="$( echo $TRACKNAME | munge_Startcase )"
-			else	
-				echo ARTIST="$TRACKARTIST"
-				echo ALBUM="$DALBUM"
-				echo TITLE="$TRACKNAME"
-			fi
+			echo ARTIST="$TRACKARTIST"
+			echo ALBUM="$DALBUM"
+			echo TITLE="$TRACKNAME"
 			if [ "$VARIOUSARTISTS" = "y" ]; then
 				echo "$FLACTAGALBUMARTISTTAGNAME"="$FLACTAGALBUMARTISTVALUE"
 			fi
@@ -3175,6 +3169,9 @@ do_cddb_read ()
 # to normalise the data
 do_mungecddb ()
 {
+	if checkstatus mungecddb; then
+		return
+	fi
 	num_musicbrainz=$(checkstatus "musicbrainz-entries")
 	num_cddb=$(checkstatus "cddb-entries")
 	num_cdtext=$(checkstatus "cdtext-entries")
@@ -3202,6 +3199,7 @@ do_mungecddb ()
 		# move the updated temp file back
 		mv -f "${ABCDETEMPDIR}/cddbread.$CDDBENTRY.tmp" "${ABCDETEMPDIR}/cddbread.$CDDBENTRY"	
 	done
+	addstatus mungecddb
 }
 
 # do_cddbedit
@@ -4235,7 +4233,6 @@ PADTRACKS=n
 NOGAP=n
 BATCHNORM=n
 NOCDDBQUERY=n
-FLACTAGSTARTCASE=n
 FLACTAGALBUMARTISTTAGNAME="ALBUMARTIST"
 FLACTAGALBUMARTISTVALUE="Various Artists"
 READHIDDENTRACK=n

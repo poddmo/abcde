@@ -3169,7 +3169,7 @@ do_cddb_read ()
 # to normalise the data
 do_mungecddb ()
 {
-	if checkstatus mungecddb; then
+	if checkstatus mungecddb-complete > /dev/null ; then
 		return
 	fi
 	num_musicbrainz=$(checkstatus "musicbrainz-entries")
@@ -3184,12 +3184,13 @@ do_mungecddb ()
 	for (( CDDBENTRY=1 ; CDDBENTRY<=$NUM_RESPONSES ; CDDBENTRY++ ))
 	do
 		# read lines of the file
+		addstatus "mungecddb-progress=$CDDBENTRY"
 		cat "${ABCDETEMPDIR}/cddbread.$CDDBENTRY" | while read line
 		do
 			localtmpfile="${ABCDETEMPDIR}/cddbread.$CDDBENTRY.tmp"
-			# if the line begins with DTITLE, DGENRE or TTITLE
+			# if the line begins with an xmcd valid keyword
 			# pipe it to mungecddb
-			if echo "$line" | grep -qE '^DTITLE|^DGENRE|^TTITLE';
+			if echo "$line" | grep -qE '^DISCID|^DTITLE|^DYEAR|^DGENRE|^TTITLE|^EXTD|^EXTT|^PLAYORDER';
 			then
 				mungecddb "$line" >> "$localtmpfile"
 			else
@@ -3199,7 +3200,12 @@ do_mungecddb ()
 		# move the updated temp file back
 		mv -f "${ABCDETEMPDIR}/cddbread.$CDDBENTRY.tmp" "${ABCDETEMPDIR}/cddbread.$CDDBENTRY"	
 	done
-	addstatus mungecddb
+	mv "${ABCDETEMPDIR}/cddbchoices" "${ABCDETEMPDIR}/cddbchoices.0"
+	cat "${ABCDETEMPDIR}/cddbchoices.0" | while read line
+	do
+		mungecddb "$line" >> "${ABCDETEMPDIR}/cddbchoices"
+	done
+	addstatus "mungecddb-complete"
 }
 
 # do_cddbedit
@@ -3250,13 +3256,13 @@ do_cddbedit ()
 									# We parse the 2 choices to diff, store them in temporary files and diff them.
 									for PARSECHOICE in $(echo $CDDBCHOICE | tr , \ ); do
 										do_cddbparse "${ABCDETEMPDIR}/cddbread.$PARSECHOICE" \
-													 > "${ABCDETEMPDIR}/cddbread.parsechoice.$PARSECHOICE"
+											> "${ABCDETEMPDIR}/cddbread.parsechoice.$PARSECHOICE"
 									done
 									echo "Showing diff between choices $PARSECHOICE1 and $PARSECHOICE2..." \
-										 > "${ABCDETEMPDIR}/cddbread.diff"
+										> "${ABCDETEMPDIR}/cddbread.diff"
 									$DIFF $DIFFOPTS "${ABCDETEMPDIR}/cddbread.parsechoice.$PARSECHOICE1" \
-										  "${ABCDETEMPDIR}/cddbread.parsechoice.$PARSECHOICE2" \
-										  >> "${ABCDETEMPDIR}/cddbread.diff"
+										"${ABCDETEMPDIR}/cddbread.parsechoice.$PARSECHOICE2" \
+										>> "${ABCDETEMPDIR}/cddbread.diff"
 									page "${ABCDETEMPDIR}/cddbread.diff"
 								fi
 							else

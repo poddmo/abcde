@@ -4567,7 +4567,9 @@ while getopts 1a:bBc:C:d:DefgGhj:klLmMnNo:pPQ:r:s:S:t:T:UvVxX:w:W:z opt ; do
 		   ;;
 		C) CDDBDISCID="$( echo "${OPTARG#abcde.}" | tr -d /)" ;;
 		d) CDROM="$OPTARG" ;;
-		D) set -x ;;
+		D) set -x
+		   PS4='+ ${LINENO}(${FUNCNAME}): '
+		   ;;
 		h) usage; exit ;;
 		e) ERASEENCODEDSTATUS=y ;;
 		E) ENCODING="$OPTARG" ;;

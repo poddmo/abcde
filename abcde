@@ -3184,7 +3184,9 @@ do_mungecddb ()
 	for (( CDDBENTRY=1 ; CDDBENTRY<=$NUM_RESPONSES ; CDDBENTRY++ ))
 	do
 		# read lines of the file
-		addstatus "mungecddb-progress=$CDDBENTRY"
+		if checkstatus "mungecddb-$CDDBENTRY-complete" ; then
+			continue
+		fi
 		cat "${ABCDETEMPDIR}/cddbread.$CDDBENTRY" | while read line
 		do
 			localtmpfile="${ABCDETEMPDIR}/cddbread.$CDDBENTRY.tmp"
@@ -3199,6 +3201,7 @@ do_mungecddb ()
 		done
 		# move the updated temp file back
 		mv -f "${ABCDETEMPDIR}/cddbread.$CDDBENTRY.tmp" "${ABCDETEMPDIR}/cddbread.$CDDBENTRY"	
+		addstatus "mungecddb-$CDDBENTRY-complete"
 	done
 	mv "${ABCDETEMPDIR}/cddbchoices" "${ABCDETEMPDIR}/cddbchoices.0"
 	cat "${ABCDETEMPDIR}/cddbchoices.0" | while read line

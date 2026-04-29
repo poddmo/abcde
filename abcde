@@ -3593,7 +3593,7 @@ do_getalbumart()
 								# on amazon.com a 1x1 pixel gif image will be downloaded instead:
 								FILESIZE=$(wc -c < "${ABCDETEMPDIR}/$ALBUMARTFILE")
 								if [ "$FILESIZE" -lt 1024 ]; then
-									rm "${ABCDETEMPDIR}/$ALBUMARTFILE"
+									rm -f "${ABCDETEMPDIR}/$ALBUMARTFILE"
 									vecho "could not download cover from amazon" >&2
 								fi
 							fi
@@ -3692,13 +3692,13 @@ do_getalbumart()
 						vecho Canceling art selection at user request >&2
 						## move any existing image 
 						if [ -s "${ABCDETEMPDIR}/${ALBUMARTFILE}" ]; then
-							mv "${ABCDETEMPDIR}/${ALBUMARTFILE}" "${ABCDETEMPDIR}/${ALBUMARTFILE}.rejected.jpg"
+							mv "${ABCDETEMPDIR}/${ALBUMARTFILE}" "${ABCDETEMPDIR}/${ALBUMARTFILE}.rejected"
 						fi
 						break
 					fi
-				    vvecho bottom of cover art select loop
+				    vvecho bottom of cover art select loop >&2
 				    done
-				vvecho End of interactive art selection
+				vvecho End of interactive art selection >&2
 				fi
 			fi
 		fi
@@ -3711,7 +3711,7 @@ do_getalbumart()
 					$CONVERT "${ABCDETEMPDIR}/$ALBUMARTFILE.tmp" $CONVERTOPTS "${ABCDETEMPDIR}/$ALBUMARTFILE"
 					rm -f "${ABCDETEMPDIR}/$ALBUMARTFILE.tmp"
 				else
-					rm -f "${ABCDETEMPDIR}/$ALBUMARTFILE"
+					mv "${ABCDETEMPDIR}/$ALBUMARTFILE" "${ABCDETEMPDIR}/${ALBUMARTFILE}.rejected"
 					vecho "sorry, cannot convert $ALBUMARTURLTYPE to $ALBUMARTTYPE" >&2
 					vecho "without ImageMagick convert" >&2
 				fi
@@ -3740,7 +3740,7 @@ do_getalbumart()
 				mkdir -p "$FINALALBUMARTDIR"
 				cp "${ABCDETEMPDIR}/$ALBUMARTFILE" "$FINALALBUMARTDIR"
 			done
-			rm -f "${ABCDETEMPDIR}/$ALBUMARTFILE"
+			# rm -f "${ABCDETEMPDIR}/$ALBUMARTFILE"
 			echo "get-album-art=$ALBUMARTURL" >> "${ABCDETEMPDIR}/status"
 		else
 			log warning "could not get cover"
@@ -3794,7 +3794,7 @@ do_embedalbumart()
 				"$EYED3" --add-image "$ALBUMARTFILE":FRONT_COVER "$i"
 				done
 				mkdir "$FINALDIR"/albumart_backup
-				mv "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
+				cp "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
 				vecho "Successfully embedded the album art into your $OUTPUT tracks" >&2
 			;;
 			flac)
@@ -3803,7 +3803,7 @@ do_embedalbumart()
 				"$METAFLAC" --import-picture-from="$ALBUMARTFILE" "$i"
 				done
 				mkdir "$FINALDIR"/albumart_backup
-				mv "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
+				cp "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
 				vecho "Successfully embedded the album art into your $OUTPUT tracks" >&2
 			;;
 			m4a)
@@ -3812,7 +3812,7 @@ do_embedalbumart()
 				"$ATOMICPARSLEY" "$i" --artwork "$ALBUMARTFILE" --overWrite 
 				done
 				mkdir "$FINALDIR"/albumart_backup
-				mv "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
+				cp "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
 				vecho "Successfully embedded the album art into your $OUTPUT tracks" >&2
 				;;
 			wv)
@@ -3821,7 +3821,7 @@ do_embedalbumart()
 				"$WVTAG" --write-binary-tag "Cover Art (Front)=@$ALBUMARTFILE" "$i"
 				done
 				mkdir "$FINALDIR"/albumart_backup
-				mv "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
+				cp "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
 				vecho "Successfully embedded the album art into your $OUTPUT tracks" >&2
 				;;
 			ogg)
@@ -3886,7 +3886,7 @@ do_embedalbumart()
 				rm "EXPORTTAGS"
 			done
 			mkdir "$FINALDIR"/albumart_backup
-			mv "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
+			cp "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
 			vecho "Successfully embedded the album art into your $OUTPUT tracks" >&2
 			;;
 			*) vecho "Sorry, abcde does not embed album art for the $OUTPUT container..." >&2

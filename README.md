@@ -203,6 +203,8 @@ munge_simplify_punctuation ()
         # RIGHT SINGLE QUOTATION MARK, HORIZONTAL ELLIPSIS,
         # HYPHEN, EN DASH
         sed -e "s/\xe2\x80\x99/\'/g" \
+            -e "s/\xe2\x80\x9c/\"/g" \
+            -e "s/\xe2\x80\x9d/\"/g" \
             -e "s/\xe2\x80\xa6/.../g" \
             -e "s/\xe2\x80\x90/-/g" \
             -e "s/\xe2\x80\x93/-/g" \

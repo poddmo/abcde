@@ -18,7 +18,7 @@
       packages = forAllSystems (
         system:
         let
-          abcde = (pkgsFor system).callPackage ./nix/package.nix { };
+          abcde = (pkgsFor system).callPackage ./nixos/package.nix { };
         in
         {
           inherit abcde;
@@ -27,7 +27,7 @@
       );
 
       nixosModules = rec {
-        abcde = import ./nix/module.nix;
+        abcde = import ./nixos/module.nix;
         default = abcde;
       };
 

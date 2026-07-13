@@ -117,61 +117,8 @@ Suggests: eject, distmp3, id3 (>= 0.12), id3v2, eyed3 (<< 0.7~), normalize-audio
 ```
 
 ## NixOS
-A flake is provided that wires up all the runtime dependencies for you.
-
-Add the input to your `flake.nix`:
-```nix
-inputs = {
-  abcde = {
-    url = "github:poddmo/abcde";
-    inputs.nixpkgs.follows = "nixpkgs";
-  };
-};
-```
-
-Import the module and enable it in your configuration:
-```nix
-imports = [
-  inputs.abcde.nixosModules.default
-];
-
-programs.abcde = {
-  enable = true;
-
-  # Optional: written to /etc/abcde.conf, overriding the packaged defaults.
-  # Users can still override per-account via ~/.abcde.conf.
-  settings = {
-    OUTPUTTYPE = "flac";
-    OUTPUTDIR = "/srv/music";
-    MAXPROCS = 2;
-
-    # Booleans render as abcde's y/n, so you can use true/false directly.
-    EJECTCD = true;
-    PADTRACKS = false;
-  };
-
-  # `settings` only covers KEY=value scalars. For anything else abcde.conf
-  # accepts as shell - notably the munge_* helper functions - use
-  # extraConfig, which is appended verbatim (no quoting) after settings.
-  extraConfig = ''
-    munge_simplify_punctuation () {
-        sed -e "s/\xe2\x80\x99/'/g" -e 's/\r//g'
-    }
-  '';
-};
-```
-
-Or just add the package and configure abcde the traditional way with `~/.abcde.conf`:
-```nix
-environment.systemPackages = [
-  inputs.abcde.packages.${pkgs.stdenv.hostPlatform.system}.default
-];
-```
-
-Or run it directly without installing:
-```
-nix run github:poddmo/abcde
-```
+A Nix flake is provided. See [nixos/readme-nixos.md](nixos/readme-nixos.md) for
+install instructions, the NixOS module and package usage.
 
 # Configuration
 - Configuration is a process you will refine over time as you rip more CDs and play the files on a variety of music players

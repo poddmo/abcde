@@ -1,14 +1,21 @@
 # Introduction
-This is a fork of [abcde](https://abcde.einval.com/wiki/):
-> abcde version 2.9.3 is the most recent download and was released on February 5th 2019.
+I've ripped over two thousand CDs with abcde and along the way have fixed bugs, had a go at some workflow enhancements and introduced new features.
 
+This is a fork of [abcde](https://abcde.einval.com/wiki/). At the time of forking, abcde version 2.9.3 was the most recent download and was released on February 5th 2019.
 The starting point for this GitHub repository was [2.9.4-DEV](https://git.einval.com/git/abcde.git) with the last upstream commit dated 2021-02-14.
-
-I've ripped nearly two thousand CDs with abcde and along the way have fixed some bugs, had a go at some workflow enhancements and introduced new features.
 
 Now up to version 2.12.2 released on 30th April, 2026. I've been actively maintaining this fork of abcde since 5th June, 2024. 
 
-My objective is to create music tracks, especially lossless flacs, for listening and also to record as much information from the read process as possible for archival posterity, such as TOC, cue sheet, CD-TEXT, enhanced CD directory listing, media read progress/status/errors and metadata downloaded. Ideally the info should be stored in the audio file metadata. I mostly focus on flac but am considerate to not break existing function.
+My goals are to make ripping easier and more accurate:
+ - generate audio tracks, especially lossless flacs, for listening
+ - tag the audio tracks with accurate and complete metadata
+ - implement/facilitate changes that are standards compliant
+   - CDDB and CUE file formats
+   - audio file metadata tag standards
+   - defacto standards implemented by music players and catalogues, eg Musicbrainz tags
+ - record as much information from the read process as possible for archival posterity, such as TOC, cue sheet, CD-TEXT, enhanced CD directory listing, media read progress/status/errors and metadata downloaded. Ideally the info should be stored in the audio file metadata.
+
+I mostly focus on flac but am considerate to not break existing function. All my changes are tested before I upload to this repository so I encourage you to run the latest code.
 
 Your feedback is very welcome. Please open an issue or pull request and I will look at it.
 

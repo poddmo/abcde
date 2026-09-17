@@ -3793,7 +3793,7 @@ do_embedalbumart()
 				do
 				"$EYED3" --add-image "$ALBUMARTFILE":FRONT_COVER "$i"
 				done
-				mkdir "$FINALDIR"/albumart_backup
+				mkdir -p "$FINALDIR"/albumart_backup
 				cp "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
 				vecho "Successfully embedded the album art into your $OUTPUT tracks" >&2
 			;;
@@ -3802,7 +3802,7 @@ do_embedalbumart()
 				do 
 				"$METAFLAC" --import-picture-from="$ALBUMARTFILE" "$i"
 				done
-				mkdir "$FINALDIR"/albumart_backup
+				mkdir -p "$FINALDIR"/albumart_backup
 				cp "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
 				vecho "Successfully embedded the album art into your $OUTPUT tracks" >&2
 			;;
@@ -3811,7 +3811,7 @@ do_embedalbumart()
 				do
 				"$ATOMICPARSLEY" "$i" --artwork "$ALBUMARTFILE" --overWrite 
 				done
-				mkdir "$FINALDIR"/albumart_backup
+				mkdir -p "$FINALDIR"/albumart_backup
 				cp "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
 				vecho "Successfully embedded the album art into your $OUTPUT tracks" >&2
 				;;
@@ -3820,7 +3820,7 @@ do_embedalbumart()
 				do
 				"$WVTAG" --write-binary-tag "Cover Art (Front)=@$ALBUMARTFILE" "$i"
 				done
-				mkdir "$FINALDIR"/albumart_backup
+				mkdir -p "$FINALDIR"/albumart_backup
 				cp "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
 				vecho "Successfully embedded the album art into your $OUTPUT tracks" >&2
 				;;
@@ -3885,7 +3885,7 @@ do_embedalbumart()
 				# note that the header file BUILDHEADER will be reused for each file in the loop:
 				rm "EXPORTTAGS"
 			done
-			mkdir "$FINALDIR"/albumart_backup
+			mkdir -p "$FINALDIR"/albumart_backup
 			cp "$ALBUMARTFILE" "$FINALDIR"/albumart_backup
 			vecho "Successfully embedded the album art into your $OUTPUT tracks" >&2
 			;;

@@ -671,7 +671,7 @@ do_replaygain()
 				TRACKFILE="$(mungetrackname "$TRACKNAME")"
 				ARTISTFILE="$(mungeartistname "$TRACKARTIST")"
 				ALBUMFILE="$(mungealbumname "$DALBUM")"
-				GENRE="$(mungegenre "$GENRE")"
+				GENRE="$(mungegenre "$CDGENRE")"
 				YEAR=${CDYEAR:-$CDYEAR}
 				gettracknum
 				if [ "$ONETRACK" = "y" ]; then
@@ -1842,7 +1842,7 @@ do_move ()
 		ALBUMFILE="$(mungealbumname "$DALBUM")"
 		ARTISTFILE="$(mungeartistname "$TRACKARTIST")"
 		TRACKFILE="$(mungetrackname "$TRACKNAME")"
-		GENRE="$(mungegenre "$GENRE")"
+		GENRE="$(mungegenre "$CDGENRE")"
 		YEAR=${CDYEAR:-$CDYEAR}
 		# If we want to start the tracks with a given number, we need to modify
 		# the TRACKNUM value before evaluation
@@ -1980,7 +1980,7 @@ do_playlist ()
 		for LASTTRACK in $TRACKQUEUE; do :; done
 		ALBUMFILE="$(mungealbumname "$DALBUM")"
 		ARTISTFILE="$(mungeartistname "$DARTIST")"
-		GENRE="$(mungegenre "$GENRE")"
+		GENRE="$(mungegenre "$CDGENRE")"
 		YEAR=${CDYEAR:-$CDYEAR}
 		if [ "$VARIOUSARTISTS" = "y" ] ; then
 			PLAYLISTFILE="$(eval echo "$VAPLAYLISTFORMAT")"
@@ -2031,6 +2031,9 @@ do_playlist ()
 				TRACKFILE="$(mungetrackname "$TRACKNAME")"
 				ARTISTFILE="$(mungeartistname "$TRACKARTIST")"
 				ALBUMFILE="$(mungealbumname "$DALBUM")"
+				GENRE="$(mungegenre "$CDGENRE")"
+				YEAR=${CDYEAR:-$CDYEAR}
+
 				# If we want to start the tracks with a given number, we need to modify the
 				# TRACKNUM value before evaluation
 				gettracknum
@@ -2175,6 +2178,7 @@ abcde.mkcue () {
 	echomsf () {
 		printf "$1%02i:%02i:%02i\n" $(($2/4500)) $((($2/75)%60)) $(($2%75))
 	}
+	vecho "in abcde.mkcue"
 
 	local MODE DISCID TRACKS
 	local i OFFSET LBA
@@ -2187,19 +2191,11 @@ abcde.mkcue () {
 	fi
 
 	vecho "One track is $ONETRACK"
-	TRACKFILE="$(mungetrackname "$TRACKNAME")"
-	ARTISTFILE="$(mungeartistname "$TRACKARTIST")"
-	ALBUMFILE="$(mungealbumname "$DALBUM")"
-	if [ "$ONETRACK" = "y" ]; then
-		if [ "$VARIOUSARTISTS" = "y" ]; then
-			CUEWAVFILE="$(eval echo \""$VAONETRACKOUTPUTFORMAT"\" | sed -e 's@^.*/@@').$OUTPUT"
-		else
-			CUEWAVFILE="$(eval echo \""$ONETRACKOUTPUTFORMAT"\" | sed -e 's@^.*/@@').$OUTPUT"
-		fi
-		vecho "Cue wav file is $CUEWAVFILE"
-	else
-		CUEWAVFILE="dummy.wav"
-	fi
+	# too early to know the output format, so we just use a dummy file for now
+	# this is consistent with the way mkcue works in this implementation.
+	CUEWAVFILE="dummy.wav"
+
+
 
 	set -- $CDDBTRACKINFO
 
@@ -2603,8 +2599,8 @@ do_cleancue()
 					if [ "$VARIOUSARTISTS" = "y" ]; then
 						# shamefully duplicated from splitvarious ()
 						case "$VARIOUSARTISTSTYLE" in
-					                forward)
-					                        DTITLEARTIST="$(echo "$TRACKTITLE" | sed 's- / -~-g')"
+					        forward)
+					            DTITLEARTIST="$(echo "$TRACKTITLE" | sed 's- / -~-g')"
 								TRACKARTIST="$(echo "$DTITLEARTIST" | cut -f1 -d~)"
 								TRACKNAME="$(echo "$DTITLEARTIST" | cut -f2 -d~)"
 								;;
@@ -2654,6 +2650,13 @@ do_cleancue()
 					TRACKFILE="$(mungetrackname "$TRACKNAME")"
 					ARTISTFILE="$(mungeartistname "$TRACKARTIST")"
 					ALBUMFILE="$(mungealbumname "$DALBUM")"
+					GENRE="$(mungegenre "$CDGENRE")"
+					YEAR=${CDYEAR:-$CDYEAR}
+					vvecho "Track file is $TRACKFILE"
+					vvecho "Artist file is $ARTISTFILE"
+					vvecho "Album file is $ALBUMFILE"
+					vvecho "Genre is $GENRE"
+					vvecho "Year is $YEAR"
 
 					if [ "$VARIOUSARTISTS" = "y" ]; then
 						OUTPUTFILE="$(eval echo \""$VAONETRACKOUTPUTFORMAT"\" | sed -e 's@^.*/@@').$OUTPUT"
@@ -2670,6 +2673,7 @@ do_cleancue()
 			IFS="$OIFS"
 			mv "$CUEFILE_OUT" "$CUEFILE_IN"
 			echo "cleancuefile" >> "${ABCDETEMPDIR}/status"
+			vecho "Cue file cleaned up and metadata added: ${CUEFILE_IN}."
 		fi
 	fi
 }
@@ -3563,7 +3567,7 @@ do_getalbumart()
 		# set variables
 		ALBUMFILE="$(mungealbumname "$DALBUM")"
 		ARTISTFILE="$(mungeartistname "$DARTIST")"
-		GENRE="$(mungegenre "$GENRE")"
+		GENRE="$(mungegenre "$CDGENRE")"
 		YEAR=${CDYEAR:-$CDYEAR}
 		vvecho "${ALBUMFILE} - ${ARTISTFILE} - ${GENRE} - ${YEAR} - ${CDDBMETHOD}"
 		# have we got a musicbrainz mbid or amazon asin?
@@ -3756,7 +3760,7 @@ do_embedalbumart()
 	# Set variables:
 	ALBUMFILE="$(mungealbumname "$DALBUM")"
 	ARTISTFILE="$(mungeartistname "$DARTIST")"
-	GENRE="$(mungegenre "$GENRE")"
+	GENRE="$(mungegenre "$CDGENRE")"
 	YEAR=${CDYEAR:-$CDYEAR}
 
 	# Allow for multiple output formats:
@@ -4122,7 +4126,7 @@ mungealbumname ()
 # Custom genre munging:
 mungegenre ()
 {
-	echo "$CDGENRE" | tr "[:upper:]" "[:lower:]"
+	echo "$@" | tr "[:upper:]" "[:lower:]"
 }
 
 # Custom cddb munging:

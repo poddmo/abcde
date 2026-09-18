@@ -123,6 +123,10 @@ Recommends: vorbis-tools, libdigest-sha-perl, bsd-mailx, glyrc, imagemagick
 Suggests: eject, distmp3, id3 (>= 0.12), id3v2, eyed3 (<< 0.7~), normalize-audio, vorbisgain, mkcue, mp3gain, atomicparsley
 ```
 
+## NixOS
+A Nix flake is provided. See [nixos/readme-nixos.md](nixos/readme-nixos.md) for
+install instructions, the NixOS module and package usage.
+
 # Configuration
 - Configuration is a process you will refine over time as you rip more CDs and play the files on a variety of music players
 - I recommend to get started, just put a disc in your optical drive and type:

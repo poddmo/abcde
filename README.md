@@ -159,10 +159,10 @@ This is my `$HOME/.abcde.conf`. The FLACOPTS will only work with flac 1.5.0 or l
 export LC_ALL=en_AU.UTF-8
 ACTIONS=cddb,cue,read,encode,tag,move,clean
 READHIDDENTRACK=y
-MAXPROCS=4                              # Run a few encoders simultaneously
+MAXPROCS=2                              # Run a few encoders simultaneously
 PADTRACKS=y                             # Makes track numbers 01 02 not 1 2
 EXTRAVERBOSE=2                          # Useful for debugging
-COMMENT='ABCDE=2.12.2'                  # Place a comment...'
+COMMENT="ABCDE=${VERSION}"              # Place a comment...'
 EJECTCD=y                               # Please eject cd when finished :-)
 DIFFOPTS=-y
 PAGEROPTS="-fM"

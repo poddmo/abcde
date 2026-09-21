@@ -5759,7 +5759,7 @@ if [ "$EJECTCD" = "y" ]; then
 		cd="$(echo "$CDROM" | sed -e 's=.*/==;s=[a-h]$==;')"
 		$eject $EJECTOPTS $cd
 	elif [ X"$UNAME" = X"Darwin" ] ; then
-		diskutil eject "${CDROM#/dev/}" 0
+		diskutil eject "${CDROM#/dev/}"
 	elif [ -x "$(which "$EJECT")" ]; then
 		$EJECT $EJECTOPTS "$CDROM"
 	fi

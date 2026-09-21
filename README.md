@@ -104,8 +104,12 @@ cd ..
 sudo dpkg -i abcde_2.12.2-1_all.deb
 ```
 
+## Arch Linux
+An AUR is available: https://aur.archlinux.org/packages/abcde-poddmo-git
+
 ## Red Hat-based Distributions
 Sorry we don't have a package or specific instructions yet. If you're handy at building rpm packages, a pull request would be greatly appreciated by this Debian-derived bloke.
+The easiest way to get started is usually to install abcde from your distribution and then replace `abcde`, `abcde-musicbrainz-tool` and `abcde.1` with the latest version from this repository.
 
 ## Install from source
 ```

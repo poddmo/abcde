@@ -2178,7 +2178,7 @@ abcde.mkcue () {
 	echomsf () {
 		printf "$1%02i:%02i:%02i\n" $(($2/4500)) $((($2/75)%60)) $(($2%75))
 	}
-	vecho "in abcde.mkcue"
+	vvecho "abcde.mkcue: $*"
 
 	local MODE DISCID TRACKS
 	local i OFFSET LBA
@@ -2190,13 +2190,13 @@ abcde.mkcue () {
 		MODE=PREGAP
 	fi
 
-	vecho "One track is $ONETRACK"
+	# [ $ONETRACK ] && vvecho "abcde.mkcue: ONETRACK is $ONETRACK"
+
 	# too early to know the output format, so we just use a dummy file for now
 	# this is consistent with the way mkcue works in this implementation.
 	CUEWAVFILE="dummy.wav"
 
-
-
+	vvecho "abcde.mkcue: CDDBTRACKINFO: $CDDBTRACKINFO"
 	set -- $CDDBTRACKINFO
 
 	DISCID=$1

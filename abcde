@@ -2178,6 +2178,7 @@ abcde.mkcue () {
 		printf "$1%02i:%02i:%02i\n" $(($2/4500)) $((($2/75)%60)) $(($2%75))
 	}
 	vvecho "abcde.mkcue: $*"
+	vvecho "abcde.mkcue: ONETRACK is ${ONETRACK:-unset}"
 
 	local MODE DISCID TRACKS
 	local i OFFSET LBA
@@ -2188,8 +2189,6 @@ abcde.mkcue () {
 	else
 		MODE=PREGAP
 	fi
-
-	# [ $ONETRACK ] && vvecho "abcde.mkcue: ONETRACK is $ONETRACK"
 
 	# too early to know the output format, so we just use a dummy file for now
 	# this is consistent with the way mkcue works in this implementation.

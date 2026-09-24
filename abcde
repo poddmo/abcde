@@ -2221,17 +2221,18 @@ abcde.mkcue () {
 		printf "$1%02i:%02i:%02i\n" $(($2/4500)) $((($2/75)%60)) $(($2%75))
 	}
 	vvecho "abcde.mkcue: $*"
-	vvecho "abcde.mkcue: ONETRACK is ${ONETRACK:-unset}"
 
 	local MODE DISCID TRACKS
 	local i OFFSET LBA
 	local CUEWAVFILE
 
-	if [ "$ONETRACK" = "y" ]; then
+	if [ "$ONETRACK" = "y" ] || [ "$HTOA" = "y" ] ; then
 		MODE=INDEX
 	else
 		MODE=PREGAP
 	fi
+
+	vvecho "abcde.mkcue: ONETRACK is ${ONETRACK:-unset}, HTOA is ${HTOA:-unset}, MODE is ${MODE}"
 
 	# too early to know the output format, so we just use a dummy file for now
 	# this is consistent with the way mkcue works in this implementation.
@@ -2449,8 +2450,10 @@ do_discid ()
 			if [ "${READHIDDENTRACK:-n}" = "y" ]; then
 				X=$(echo "$CDPARANOIAOUTPUT" | awk '$1=="1." {if ($4 > 150) print "y"; else print "n"};')
 				if [ "$X" = "y" ]; then
-					# hidden track exists so prepend it to TRACKQUEUE
+					# hidden track exists
 					echo -n 'Hidden track found - ' >&2
+					HTOA=y
+					# prepend the hidden track to TRACKQUEUE
 					X=$(printf "%0.${TRACKNUMPADDING}d" 0)
 					TRACKQUEUE=$(echo $X $TRACKQUEUE)
 				fi

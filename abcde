@@ -2603,6 +2603,9 @@ do_discid ()
                         [ -n "$SUBMITURL" ] && echo "$SUBMITURL" > "$ABCDETEMPDIR/submiturl"
 			;;
 	esac
+	
+	# Write the CD TOC to disk
+	echo "${CDPARANOIAOUTPUT}" > "${ABCDETEMPDIR}/toc-${CDDBDISCID}.txt"
 }
 
 # do_cleancue

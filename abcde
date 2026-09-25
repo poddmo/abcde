@@ -83,11 +83,6 @@ echo ""
 #echo "Double hyphens are used to concatenate tracks"
 }
 
-addstatus ()
-{
-	echo "$@" >> "${ABCDETEMPDIR}/status"
-}
-
 # log [level] [message]
 #
 # log outputs the right message in a common format
@@ -152,6 +147,17 @@ get_last()
 		for last in $@ ; do :; done
 	fi
 	echo "$last"
+}
+
+# addstatus [blurb]
+# Write the blurb to the status file
+#
+addstatus ()
+{
+	local blurb="$@"
+	if [ -n "$blurb" ]; then
+		echo "$blurb" >> "${ABCDETEMPDIR}/status"
+	fi
 }
 
 # checkstatus [blurb]
@@ -2608,6 +2614,7 @@ do_discid ()
 	esac
 	
 	# Write the CD TOC to disk
+	addstatus cdparanoia-toc-query
 	echo "${CDPARANOIAOUTPUT}" > "${ABCDETEMPDIR}/toc-${CDDBDISCID}.txt"
 }
 

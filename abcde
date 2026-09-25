@@ -24,7 +24,6 @@ echo "-a <action1[,action2]...>"
 echo "       Actions to perform, comma separated:"
 echo "       (cddb,read,getalbumart,embedalbumart,normalize,encode,"
 echo "       tag,move,replaygain,playlist,clean)"
-#echo "-A     Experimental actions (retag, transcode)"
 echo "-b     Enable batch normalization"
 echo "-B     Embed albumart (this also activates getalbumart)"
 echo "-c <file>"
@@ -4597,7 +4596,6 @@ while getopts 1a:bBc:C:d:DefgGhj:klLmMnNo:pPQ:r:s:S:t:T:UvVxX:w:W:z opt ; do
 	case "$opt" in
 		1) ONETRACK=y ;;
 		a) ACTIONS="$OPTARG" ;;
-		A) EXPACTIONS="$OPTARG" ;;
 		b) BATCHNORM=y ;;
 		B) GETALBUMART=y ; EMBEDALBUMART=y ;;
 		c) if [ -e "$OPTARG" ]; then
@@ -4768,7 +4766,6 @@ else
 fi
 
 # List of valid actions: cddb,read,normalize,encode,tag,move,playlist,clean
-# List of experimental actions: retag,transcode
 
 # Determine what actions are to be done from $ACTIONS and set the
 # following environment variables for them:

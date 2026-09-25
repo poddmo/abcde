@@ -1992,6 +1992,12 @@ do_move ()
 					fi
 				fi
 			fi
+			# Lets move the ARCHIVE mode files
+			if [ "$ARCHIVEMODE" = "y" ]; then
+				if [ -e "${ABCDETEMPDIR}/toc-${CDDBDISCID}.txt" ]; then
+					mv -v "${ABCDETEMPDIR}/toc-${CDDBDISCID}.txt" "$OUTPUTFILEDIR"
+				fi
+			fi
 		fi
 	done
 }

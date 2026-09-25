@@ -24,6 +24,7 @@ echo "-a <action1[,action2]...>"
 echo "       Actions to perform, comma separated:"
 echo "       (cddb,read,getalbumart,embedalbumart,normalize,encode,"
 echo "       tag,move,replaygain,playlist,clean)"
+echo "-A     Enable archive mode"
 echo "-b     Enable batch normalization"
 echo "-B     Embed albumart (this also activates getalbumart)"
 echo "-c <file>"
@@ -70,7 +71,7 @@ echo "-V     Be a bit more verbose about what is happening behind the scenes"
 echo "-x     Eject CD after all tracks are read"
 echo "-w <comment>"
 echo "       Add a comment to the CD tracks"
-echo "-W <#[,#]>"
+echo "-W <#>[,#]"
 echo "       Set the disc number when the CD is part of a set."
 echo "       Takes an integer disc number, optionally followed"
 echo "       by a comma and the total number of CDs in the set"
@@ -78,6 +79,7 @@ echo "-z     Use debug CDROMREADERSYNTAX option (needs cdparanoia)"
 echo ""
 echo "Tracks is a space-delimited list of tracks to grab."
 echo "Ranges specified with hyphens are allowed (i.e., 1-5)."
+echo "<options> are required. [options] are optional."
 echo ""
 #echo "Double hyphens are used to concatenate tracks"
 }
@@ -4233,6 +4235,8 @@ CDDBUSELOCAL="n"
 # List of fields we parse and show during the CDDB parsing...
 SHOWCDDBFIELDS="year,genre"
 
+# Define archive mode default. This is used to determine how much info to get and keep
+ARCHIVEMODE=n
 
 INTERACTIVE=y
 #CDROMREADERSYNTAX=cdparanoia
@@ -4592,10 +4596,11 @@ case "$EXTRAVERBOSE" in
 esac
 
 # Parse command line options
-while getopts 1a:bBc:C:d:DefgGhj:klLmMnNo:pPQ:r:s:S:t:T:UvVxX:w:W:z opt ; do
+while getopts 1a:AbBc:C:d:DefgGhj:klLmMnNo:pPQ:r:s:S:t:T:UvVxX:w:W:z opt ; do
 	case "$opt" in
 		1) ONETRACK=y ;;
 		a) ACTIONS="$OPTARG" ;;
+		A) ARCHIVEMODE=y ;;
 		b) BATCHNORM=y ;;
 		B) GETALBUMART=y ; EMBEDALBUMART=y ;;
 		c) if [ -e "$OPTARG" ]; then

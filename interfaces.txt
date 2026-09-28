@@ -53,6 +53,8 @@ cddbquery   - result code and summary of a disc lookup. Based on the
 	      used internally by abcde to denote a local cddb data
 	      cache
 
+toc-<discid>.txt - raw CD TOC data used to generate cue file
+
 cue-<discid>.txt - cue file generated from the track data on the disc
 
 cddbdiscid  - raw data showing the cddb discid and the track info numbers

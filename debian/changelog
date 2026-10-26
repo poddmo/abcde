@@ -1,22 +1,33 @@
+abcde (2.13.1-1) unstable; urgency=low
+
+  * Introducing archive mode
+  * Improvements to CUE files when ripping whole discs to a single flac file
+    with proper support for any non-zero PREGAP values.
+  * Improved verbose output handling
+  * Add new genre types
+  * Bug fixes and consistency tweaks
+
+ -- poddmo <poddmo@users.noreply.github.com>  Mon, 26 Oct 2026 14:00:00 +1000
+
 abcde (2.12.1-1) unstable; urgency=low
 
   * Add discnumber to onetrack filename
 
- -- poddmo <https://github.com/poddmo/abcde> Fri, 06 Feb 2026 11:00:00 +1000
+ -- poddmo <poddmo@users.noreply.github.com>  Fri, 06 Feb 2026 11:00:00 +1000
 
 abcde (2.12.0-1) unstable; urgency=medium
 
   * Various bug fixes and improvements, especially for wholedisk flacs
   * Generate a MusicBrainz URL to submit unknown discs
 
- -- poddmo <https://github.com/poddmo/abcde> Fri, 30 Jan 2026 18:00:00 +1000
+ -- poddmo <poddmo@users.noreply.github.com>  Fri, 30 Jan 2026 18:00:00 +1000
 
 abcde (2.11.1-1) unstable; urgency=medium
 
   * New feature:
     + Copy Hidden Track One Audio, if it exists
 
- -- poddmo <https://github.com/poddmo/abcde> Sat, 26 Apr 2025 15:00:00 +1000
+ -- poddmo <poddmo@users.noreply.github.com>  Sat, 26 Apr 2025 15:00:00 +1000
 
 
 abcde (2.11.0-1) unstable; urgency=medium
@@ -26,7 +37,7 @@ abcde (2.11.0-1) unstable; urgency=medium
     + Includes many fixes, improvements and new features. See the GitHub
       repo for details.
 
- -- poddmo <https://github.com/poddmo/abcde> Sun, 13 Apr 2025 18:40:00 +1000
+ -- poddmo <poddmo@users.noreply.github.com>  Sun, 13 Apr 2025 18:40:00 +1000
 
 abcde (2.9.3-1) unstable; urgency=medium
 

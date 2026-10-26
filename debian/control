@@ -1,7 +1,7 @@
 Source: abcde
 Section: sound
 Priority: optional
-Maintainer: poddmo <https://github.com/poddmo/abcde>
+Maintainer: poddmo <poddmo@users.noreply.github.com>
 Homepage: https://abcde.einval.com/
 Standards-Version: 4.3.0
 Build-Depends: debhelper (>= 10)
@@ -11,9 +11,8 @@ Vcs-Git: https://git.einval.com/git/abcde.git
 Package: abcde
 Architecture: all
 Depends: ${misc:Depends}, cd-discid, wget, cdparanoia | icedax, vorbis-tools (>= 1.0beta4-1) | lame | flac | speex | musepack-tools | opus-tools, libmusicbrainz-discid-perl, libwebservice-musicbrainz-perl (>= 1.0.4-1.1), sensible-utils
-Recommends: vorbis-tools, libdigest-sha-perl, bsd-mailx, glyrc, imagemagick
-Suggests: eject, distmp3, id3 (>= 0.12), id3v2, eyed3 (<< 0.7~),
- normalize-audio, vorbisgain, mkcue, mp3gain, atomicparsley
+Recommends: vorbis-tools, libdigest-sha-perl, glyrc, imagemagick
+Suggests: eject, distmp3, id3 (>= 0.12), id3v2, eyed3 (<< 0.7~), normalize-audio, vorbisgain, mkcue, mp3gain, atomicparsley, bsd-mailx
 Description: A Better CD Encoder
  frontend program to cdparanoia, wget, cd-discid, id3, and your
  favorite Ogg/Vorbis, MP3, FLAC, Ogg/Speex, M4A, Opus, WavPack,

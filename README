@@ -27,6 +27,16 @@ MAJOR CHANGES
 
 (See https://github.com/poddmo/abcde for complete details)
 
+abcde 2.13.1
+
+ * Introducing archive mode.  This writes the raw CD TOC data to the output
+   directory.  No additional reads are made - this just saves the info that
+   we already have.
+ * improved verbose output handling
+ * added new genre types
+ * improvements to CUE files when ripping whole discs to a single flac file
+   with proper support for any non-zero PREGAP values.
+ * bug fixes and consistency tweaks
 
 abcde 2.12
  * Various bug fixes and improvements, especially for wholedisk flacs

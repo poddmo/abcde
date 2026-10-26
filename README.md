@@ -1,16 +1,32 @@
 # Introduction
-This is a fork of [abcde](https://abcde.einval.com/wiki/):
-> abcde version 2.9.3 is the most recent download and was released on February 5th 2019.
+I've ripped over two thousand CDs with abcde and along the way have fixed bugs, had a go at some workflow enhancements and introduced new features.
 
+This is a fork of [abcde](https://abcde.einval.com/wiki/). At the time of forking, abcde version 2.9.3 was the most recent download and was released on February 5th 2019.
 The starting point for this GitHub repository was [2.9.4-DEV](https://git.einval.com/git/abcde.git) with the last upstream commit dated 2021-02-14.
 
-I've ripped nearly two thousand CDs with abcde and along the way have fixed some bugs, had a go at some workflow enhancements and introduced new features.
+Now up to version 2.13.1 released on 26th October, 2026. I've been actively maintaining this fork of abcde since 5th June, 2024. 
 
-Now up to version 2.12.2 released on 30th April, 2026. I've been actively maintaining this fork of abcde since 5th June, 2024. 
+My goals are to:
+ - generate archive-grade backups of audio CDs in hand
+ - streamline the workflow and automation
+ - tag the audio tracks with accurate and complete metadata
+ - implement/facilitate changes that are standards compliant
+   - metadata standards for flac and other output formats, eg tags
+   - CDDB and CUE file formats
+   - defacto standards implemented by music players and catalogues, eg Musicbrainz tags
+ - provide ongoing maintenance so that abcde continues to work in the future
 
-My objective is to create music tracks, especially lossless flacs, for listening and also to record as much information from the read process as possible for archival posterity, such as TOC, cue sheet, CD-TEXT, enhanced CD directory listing, media read progress/status/errors and metadata downloaded. Ideally the info should be stored in the audio file metadata. I mostly focus on flac but am considerate to not break existing function.
+Archive-grade backups aims to record everything possible from the disc, starting with the audio tracks but also CD TOC, CD-TEXT, enhanced-CD directory listing, media read status/issues and metadata downloaded. Ideally the info should be stored in the audio file metadata.
 
-Your feedback is very welcome. Please open an issue or pull request and I will look at it.
+I mostly focus on flac but am considerate to not break existing function. Whole disk flac archives are now a format of focus due to their ability to capture an entire album, artwork and other metadata in a single file. Additionally, more music players are able to handle them correctly. Whole disk flacs can achieve the goal: One disc = one file
+
+## Submitting issues and pull requests
+
+Your feedback is very welcome. Please open an issue and I will read it. Let me know about your environment (operating system name and version, abcde version, abcde config file, abcde command line, the details of the audio CD that you are testing with (Discogs links are my preference).
+
+I will look at pull requests respectfully but please submit code that you have run real live tests by ripping CDs. It is also helpful to provide URL references to standards or discussions when the pull request changes files on disk (eg metadata formats, music player compatibility)
+
+All changes committed to this repository are tested before I commit them so I encourage you to run the latest code and provide feedback.
 
 # Features
 ## Enhancements
@@ -20,13 +36,13 @@ Your feedback is very welcome. Please open an issue or pull request and I will l
   - The -W option is expanded to optionally add the total number of discs in the set. These details are recorded in the FLAC metadata tags DISCNUMBER and DISCTOTAL
   - Create playlist defaults to append instead of erase when the disc number is greater than 1
 - Improved handling of FLACs:
+  - Add the MUSICBRAINZ MBIDs as tags
   - comments added on the command line with the -w option are designated as USERCOMMENTS and added to every track
   - CDDB extended data (EXTD) are passed through to FLAC COMMENT tags and added to every track
   - CDDB extended track data (EXTTn) is passed through to FLAC COMMENT tags for the relevant track
     - see https://gnudb.org/gnudbformat.php for Gnudb xmcd file format
   - Configurable FLAC ALBUMARTIST="Various Artists" metadata tag for multi-artist CDs
   - Enhanced whole disk flac archives with hidden track one audio and cue sheet with track titles
-  - Whole disk flac archives are now a format of focus due to their ability to capture an entire album, artwork and other metadata in a single file. Additionally, more music players are able to handle them correctly
 - Improved handling of cover art:
   - Album art selection and handling improvements
   - Define a default local album art directory/file location. If the album artwork download fails or the user chooses to overide the downloaded art, abcde will look for ALBUMARTDIR/ALBUMARTFILE before asking the user to manually enter the filename
@@ -45,6 +61,9 @@ Your feedback is very welcome. Please open an issue or pull request and I will l
   - provide help option in cddb entry selection
     - explain how to diff (show the differences between two CDDB entries)
     - provide option to re-list available entries
+- Archive mode
+  - writes the raw CD TOC data to the output directory
+  - planned features include: CD-TEXT dump, directory listings of Enhanced CD
 
 ## Bug fixes, patches and pull requests
 - applied many patches from GitHub issues and pull requests
@@ -82,29 +101,37 @@ sudo apt install abcde bsd-mailx- ffmpeg flac eject eyed3 glyrc imagemagick mkcu
 ```
 Then install my latest updated version from the github repo with all the bug fixes, workflow and metadata improvements:
 ```
-wget https://github.com/poddmo/abcde/releases/download/2.12.2/abcde_2.12.2-1_all.deb
-sudo dpkg -i abcde_2.12.2-1_all.deb
+wget https://github.com/poddmo/abcde/releases/download/2.13.1/abcde_2.13.1-1_all.deb
+sudo dpkg -i abcde_2.13.1-1_all.deb
 ```
 
 ### Build the package from source
 Download the source, extract it, create a package from it and then install the fresh package:
 ```
-wget -O abcde_2.12.2.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.12.2.tar.gz
-tar zxf abcde_2.12.2.tar.gz
-cd abcde-2.12.2
+wget -O abcde_2.13.1.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.13.1.tar.gz
+tar zxf abcde_2.13.1.tar.gz
+cd abcde-2.13.1
 dpkg-buildpackage -us -uc --build=binary
 cd ..
-sudo dpkg -i abcde_2.12.2-1_all.deb
+sudo dpkg -i abcde_2.13.1-1_all.deb
 ```
+
+## Arch Linux
+An AUR is available: https://aur.archlinux.org/packages/abcde-poddmo-git
 
 ## Red Hat-based Distributions
 Sorry we don't have a package or specific instructions yet. If you're handy at building rpm packages, a pull request would be greatly appreciated by this Debian-derived bloke.
+The easiest way to get started is usually to install abcde from your distribution and then replace `abcde`, `abcde-musicbrainz-tool` and `abcde.1` with the latest version from this repository.
+
+## NixOS
+There is an open pull request to [Add Nix flake, package, and NixOS module](https://github.com/poddmo/abcde/pull/38)
+Please review, test and comment.
 
 ## Install from source
 ```
-wget -O abcde_2.12.2.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.12.2.tar.gz
-tar zxf abcde_2.12.2.tar.gz
-cd abcde-2.12.2
+wget -O abcde_2.13.1.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.13.1.tar.gz
+tar zxf abcde_2.13.1.tar.gz
+cd abcde-2.13.1
 chmod 755 abcde abcde-musicbrainz-tool cddb-tool
 sudo cp abcde abcde-musicbrainz-tool cddb-tool /usr/local/bin
 sudo cp abcde.1 cddb-tool.1 /usr/local/share/man/man1/
@@ -150,16 +177,16 @@ and _look at my configuration file below._
 - Line 4: I only try to download albumart for the first disc in a set. Disc 2 of 2 (`-W 2,2`) is in my second optical drive (`-d /dev/sr1`)
 
 # Configuration file example
-This is my `$HOME/.abcde.conf`. The FLACOPTS will only work with flac 1.5.0 or later (I've installed that from source from https://xiph.org/flac/)
+This is my `$HOME/.abcde.conf`. The FLACOPTS will only work with flac 1.5.0 or later.
 
 ```
 export LC_ALL=en_AU.UTF-8
 ACTIONS=cddb,cue,read,encode,tag,move,clean
 READHIDDENTRACK=y
-MAXPROCS=4                              # Run a few encoders simultaneously
+MAXPROCS=2                              # Run a few encoders simultaneously
 PADTRACKS=y                             # Makes track numbers 01 02 not 1 2
 EXTRAVERBOSE=2                          # Useful for debugging
-COMMENT='ABCDE=2.12.2'                  # Place a comment...'
+COMMENT="ABCDE=${VERSION}"              # Place a comment...'
 EJECTCD=y                               # Please eject cd when finished :-)
 DIFFOPTS=-y
 PAGEROPTS="-fM"
@@ -190,6 +217,8 @@ CDROMREADERSYNTAX=cdparanoia
 CDPARANOIA=cdparanoia
 CDPARANOIAOPTS="-L --never-skip=2"
 CDDISCID=cd-discid
+MKCUE=abcde.mkcue
+CUEREADERSYNTAX=abcde.mkcue
 OUTPUTDIR="$HOME/Music"
 OUTPUTFORMAT='${ARTISTFILE}/${ALBUMFILE}/${TRACKNUM}.${TRACKFILE}'
 VAOUTPUTFORMAT='Various-${ALBUMFILE}/${TRACKNUM}.${ARTISTFILE}-${TRACKFILE}'
@@ -198,6 +227,9 @@ VAONETRACKOUTPUTFORMAT='Various-${ALBUMFILE}/Various-${ALBUMFILE}${DISCNUMBER:+$
 PLAYLISTFORMAT='${ARTISTFILE}/${ALBUMFILE}/${ARTISTFILE} - ${ALBUMFILE}.m3u'
 VAPLAYLISTFORMAT='Various-${ALBUMFILE}/${ALBUMFILE}.m3u'
 DOSPLAYLIST=n
+IDENTIFY='magick identify'
+CONVERT='magick convert'
+DISPLAYCMD='magick display'
 DISPLAYCMDOPTS="-resize 900x900 -title abcde_album_art"
 CONVERTOPTS="-resize 900x900>"
 ALBUMARTALWAYSCONVERT="y"

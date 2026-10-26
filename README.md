@@ -4,7 +4,7 @@ I've ripped over two thousand CDs with abcde and along the way have fixed bugs, 
 This is a fork of [abcde](https://abcde.einval.com/wiki/). At the time of forking, abcde version 2.9.3 was the most recent download and was released on February 5th 2019.
 The starting point for this GitHub repository was [2.9.4-DEV](https://git.einval.com/git/abcde.git) with the last upstream commit dated 2021-02-14.
 
-Now up to version 2.12.2 released on 30th April, 2026. I've been actively maintaining this fork of abcde since 5th June, 2024. 
+Now up to version 2.13.1 released on 26th October, 2026. I've been actively maintaining this fork of abcde since 5th June, 2024. 
 
 My goals are to:
  - generate archive-grade backups of audio CDs in hand
@@ -61,6 +61,9 @@ All changes committed to this repository are tested before I commit them so I en
   - provide help option in cddb entry selection
     - explain how to diff (show the differences between two CDDB entries)
     - provide option to re-list available entries
+- Archive mode
+  - writes the raw CD TOC data to the output directory
+  - planned features include: CD-TEXT dump, directory listings of Enhanced CD
 
 ## Bug fixes, patches and pull requests
 - applied many patches from GitHub issues and pull requests
@@ -98,19 +101,19 @@ sudo apt install abcde bsd-mailx- ffmpeg flac eject eyed3 glyrc imagemagick mkcu
 ```
 Then install my latest updated version from the github repo with all the bug fixes, workflow and metadata improvements:
 ```
-wget https://github.com/poddmo/abcde/releases/download/2.12.2/abcde_2.12.2-1_all.deb
-sudo dpkg -i abcde_2.12.2-1_all.deb
+wget https://github.com/poddmo/abcde/releases/download/2.13.1/abcde_2.13.1-1_all.deb
+sudo dpkg -i abcde_2.13.1-1_all.deb
 ```
 
 ### Build the package from source
 Download the source, extract it, create a package from it and then install the fresh package:
 ```
-wget -O abcde_2.12.2.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.12.2.tar.gz
-tar zxf abcde_2.12.2.tar.gz
-cd abcde-2.12.2
+wget -O abcde_2.13.1.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.13.1.tar.gz
+tar zxf abcde_2.13.1.tar.gz
+cd abcde-2.13.1
 dpkg-buildpackage -us -uc --build=binary
 cd ..
-sudo dpkg -i abcde_2.12.2-1_all.deb
+sudo dpkg -i abcde_2.13.1-1_all.deb
 ```
 
 ## Arch Linux
@@ -126,9 +129,9 @@ Please review, test and comment.
 
 ## Install from source
 ```
-wget -O abcde_2.12.2.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.12.2.tar.gz
-tar zxf abcde_2.12.2.tar.gz
-cd abcde-2.12.2
+wget -O abcde_2.13.1.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.13.1.tar.gz
+tar zxf abcde_2.13.1.tar.gz
+cd abcde-2.13.1
 chmod 755 abcde abcde-musicbrainz-tool cddb-tool
 sudo cp abcde abcde-musicbrainz-tool cddb-tool /usr/local/bin
 sudo cp abcde.1 cddb-tool.1 /usr/local/share/man/man1/

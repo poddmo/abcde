@@ -1,4 +1,4 @@
-.TH abcde 1 "28 April 2026" "abcde 2.12.2-DEV"
+.TH abcde 1 "26 October 2026" "abcde 2.13.1"
 .SH NAME
 abcde \- Grab an entire CD and compress it to Ogg/Vorbis, MP3, FLAC, Ogg/Speex, AAC, 
 WavPack, Monkey's Audio (ape), MPP/MP+(Musepack), True Audio (tta), MP2 format
@@ -75,6 +75,9 @@ encode. Move implies cddb, read, encode, tag. Replaygain implies cddb, read,
 encode, tag and move. Playlist implies cddb. embedalbumart implies getalbumart.
 The default is to do all actions except cue, normalize, replaygain, getalbumart,
 embedalbumart and playlist.
+.TP
+.B \-A
+Enable archive mode. This writes a file with the raw CD TOC data to the output directory.
 .TP
 .B \-b
 Enable batch mode normalization. See the BATCHNORM configuration variable.

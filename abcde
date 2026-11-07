@@ -12,7 +12,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-VERSION='2.13.2-DEV'
+VERSION='2.13.2'
 
 usage ()
 {
@@ -1999,8 +1999,7 @@ do_move ()
 				fi
 				if [ -e "${ABCDETEMPDIR}/data-cdtext/cd-text" ]; then
 					cp "${ABCDETEMPDIR}/data-cdtext/cd-text" "${OUTPUTFILEDIR}/cd-text-${CDDBDISCID}.txt"
-				fi
-				if [ -e "${ABCDETEMPDIR}/mbdiscid" ]; then
+				elif [ -e "${ABCDETEMPDIR}/mbdiscid" ]; then
 					cp "${ABCDETEMPDIR}/mbdiscid" "${OUTPUTFILEDIR}/mbdiscid.txt"
 				fi
 			fi # end of Archive files move

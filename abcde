@@ -12,7 +12,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-VERSION='2.13.1'
+VERSION='2.13.2-DEV'
 
 usage ()
 {
@@ -4231,7 +4231,7 @@ CDDBMETHOD=musicbrainz
 CDDBURL="http://gnudb.gnudb.org/~cddb/cddb.cgi"
 CDDBSUBMIT=submit@gnudb.org
 CDDBPROTO=6
-HELLOINFO="$(whoami)@$(hostname)"
+HELLOINFO="abcde-${VERSION}@poddmo.noreply.github.com"
 CDDBCOPYLOCAL="n"
 CDDBLOCALPOLICY="always"
 CDDBLOCALRECURSIVE="y"

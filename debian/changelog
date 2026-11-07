@@ -1,3 +1,12 @@
+abcde (2.13.2-1) unstable; urgency=low
+
+  * CDDB: update HELLOINFO defaults to comply with gnudb.org identification
+    requirements
+  * Archivemode: if cd-text or musicbrainz disc IDs exist, write them to the
+    output directory
+
+ -- poddmo <poddmo@users.noreply.github.com>  Sat, 07 Nov 2026 16:00:00 +1000
+
 abcde (2.13.1-1) unstable; urgency=low
 
   * Introducing archive mode

@@ -27,6 +27,10 @@ MAJOR CHANGES
 
 (See https://github.com/poddmo/abcde for complete details)
 
+abcde 2.13.2
+ * Update HELLOINFO to comply with gnudb.org identification requirements
+ * Archivemode: save cd-text and mbdiscid if we have it
+
 abcde 2.13.1
 
  * Introducing archive mode.  This writes the raw CD TOC data to the output

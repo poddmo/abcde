@@ -3,7 +3,8 @@
 # Copyright (C) 1999 Nathaniel Smith <njs@uclink4.berkeley.edu>
 # Copyright (C) 1999, 2000, 2001 Robert Woodcock <rcw@debian.org>
 # Copyright (C) 2003, 2005 Jesus Climent <jesus.climent@hispalinux.es>
-# Copyright (c) 2012-     Steve McIntyre <93sam@@debian.org>
+# Copyright (c) 2012-2024 Steve McIntyre <93sam@@debian.org>
+# Copyright (c) 2026 poddmo <https://github.com/poddmo/abcde>
 # This code is hereby licensed for public consumption under either the
 # GNU GPL v2 or greater, or Larry Wall's Artistic License - your choice.
 #
@@ -19,7 +20,7 @@
 #  - Submitted via: line is created by template, when it really should be in send.
 #    Oh well.
 
-VERSION=0.4.7
+VERSION=0.4.8
 NAME=cddb-tool
 
 #return codes
@@ -72,7 +73,7 @@ Usage: $0 command [command_options]
 Commands:
   parse file
 	Get data out of a cddb file - dumps to stdout in a form
-	source'able by the shell
+	sourceable by the shell
 
   send file address
 	Mails a CDDB file to a specified address, using correct format.
@@ -92,10 +93,10 @@ Commands:
 	need to use a proxy then just configure wget to do so. user and
 	host will be used for identifying ourselves to the CDDB server.
   stat serverurl user host proto
-	Check server status with given protocol. This can be used to check
-	if the server supports given protocol. Most common values for proto
-	should be 5 and 3. With 3 you will not get DYEAR and DGENRE fields
-	in response.
+  	Check server status with given protocol.  This can be used to check
+	if the server supports given protocol.  Protocol level 6 is the same
+	as level 5 except that the character set is UTF-8 instead of ISO-8859-1.
+	Level 6 is preferred.
   help
 	Display this.
 EOF

@@ -1,4 +1,4 @@
-.TH CDDB-TOOL 1
+.TH CDDB-TOOL 1 "7 November 2026" "cddb-tool 0.4.8"
 .SH NAME
 cddb-tool \- Get CDDB information
 .SH SYNOPSIS
@@ -16,12 +16,15 @@ cddb-tool \- Get CDDB information
 .B cddb-tool read
 .I server user host disc-id genre
 
+.B cddb-tool stat
+.I serverurl user host proto
+
 .B cddb-tool help
 
 .SH DESCRIPTION
 cddb-tool is a backend tool for abcde. It is passed information from
 cd-discid and uses it look up the CD title, artist, and track information
-on the cddb database (http://freedb.freedb.org) on the internet.
+on the CDDB database (http://gnudb.gnudb.org) on the internet.
 .SH COMMANDS
 .B parse
 .I [file] option
@@ -77,7 +80,6 @@ then just configure wget to do so. user and host will be used for
 identifying ourselves to the CDDB server. Outputs response code and entries
 with matching CDDB entries, if successful, from the CDDB server.
 
-
 .B read
 .I [server] [user] [host] [disc-id] [genre]
 
@@ -87,6 +89,13 @@ by parse and send commands. Uses wget, so if you need to use a proxy
 then just configure wget to do so. user and host will be used for
 identifying ourselves to the CDDB server.
 
+.B stat
+.I [serverurl] [user] [host] [proto]
+
+Check server status with given protocol.  This can be used to check if the
+server supports given protocol.  Most common values for proto should be 5
+and 3.  With 3 you will not get DYEAR and DGENRE fields in response.
+
 .B help
 
 Prints usage information.
@@ -95,3 +104,4 @@ Prints usage information.
 Nathaniel Smith <njs@uclink4.berkeley.edu>, maintained as part of abcde by
 Robert Woodcock <rcw@debian.org>. Manual page compiled from help information
 by Robert Woodcock.
+Revised 2026 by poddmo <https://github.com/poddmo/abcde>.

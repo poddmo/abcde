@@ -1997,6 +1997,9 @@ do_move ()
 				if [ -e "${ABCDETEMPDIR}/toc-${CDDBDISCID}.txt" ]; then
 					cp "${ABCDETEMPDIR}/toc-${CDDBDISCID}.txt" "$OUTPUTFILEDIR"
 				fi
+				if [ -e "${ABCDETEMPDIR}/data-cdtext/cd-text" ]; then
+					cp "${ABCDETEMPDIR}/data-cdtext/cd-text" "${OUTPUTFILEDIR}/cd-text-${CDDBDISCID}.txt"
+				fi
 			fi # end of Archive files move
 		fi
 	done

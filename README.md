@@ -7,7 +7,7 @@ The starting point for this GitHub repository was [2.9.4-DEV](https://git.einval
 Now up to version 2.13.1 released on 26th October, 2026. I've been actively maintaining this fork of abcde since 5th June, 2024. 
 
 My goals are to:
- - generate archive-grade backups of audio CDs in hand
+ - generate detailed backups of audio CDs in hand: audio tracks and metadata
  - streamline the workflow and automation
  - tag the audio tracks with accurate and complete metadata
  - implement/facilitate changes that are standards compliant
@@ -16,7 +16,7 @@ My goals are to:
    - defacto standards implemented by music players and catalogues, eg Musicbrainz tags
  - provide ongoing maintenance so that abcde continues to work in the future
 
-Archive-grade backups aims to record everything possible from the disc, starting with the audio tracks but also CD TOC, CD-TEXT, enhanced-CD directory listing, media read status/issues and metadata downloaded. Ideally the info should be stored in the audio file metadata.
+abcde aims to record everything possible from the disc, starting with the audio tracks but also CD TOC, CD-TEXT, enhanced-CD directory listing, media read status/issues and metadata downloaded. Ideally the info should be stored in the audio file metadata.
 
 I mostly focus on flac but am considerate to not break existing function. Whole disk flac archives are now a format of focus due to their ability to capture an entire album, artwork and other metadata in a single file. Additionally, more music players are able to handle them correctly. Whole disk flacs can achieve the goal: One disc = one file
 
@@ -63,6 +63,7 @@ All changes committed to this repository are tested before I commit them so I en
     - provide option to re-list available entries
 - Archive mode
   - writes the raw CD TOC data to the output directory
+  - if cd-text has been looked for and found, it is written to the output directory
   - planned features include: CD-TEXT dump, directory listings of Enhanced CD
 
 ## Bug fixes, patches and pull requests
@@ -181,7 +182,7 @@ ACTIONS=cddb,cue,read,encode,tag,move,clean
 READHIDDENTRACK=y
 MAXPROCS=2                              # Run a few encoders simultaneously
 PADTRACKS=y                             # Makes track numbers 01 02 not 1 2
-EXTRAVERBOSE=2                          # Useful for debugging
+EXTRAVERBOSE=0                          # Useful for debugging
 COMMENT="ABCDE=${VERSION}"              # Place a comment...'
 EJECTCD=y                               # Please eject cd when finished :-)
 DIFFOPTS=-y
@@ -190,8 +191,9 @@ ALBUMARTFILE='cover.jpg'
 ALBUMARTDIR="${HOME}/Music"
 OVERRIDEALBUMARTDOWNLOAD=y
 ANYASCIIBIN="$HOME/bin/anyascii"
+ARCHIVEMODE=y
 LOWDISK=n
-CDDBMETHOD=musicbrainz,cddb,cdtext
+CDDBMETHOD=musicbrainz,cdtext,cddb
 CDDBCOPYLOCAL="y"
 CDDBLOCALDIR="$HOME/.cddb"
 CDDBLOCALRECURSIVE="y"
@@ -199,7 +201,7 @@ CDDBUSELOCAL="y"
 CDDBURL="http://gnudb.gnudb.org/~cddb/cddb.cgi"
 CDDBSUBMIT=submit@gnudb.org
 NOSUBMIT=n
-HELLOINFO="music@hostname"
+HELLOINFO="abcde-${VERSION}@poddmo.noreply.github.com"
 HTTPGETOPTS="-q -nv --timeout=30 --tries=2 -e timestamping=off -O -"
 FLACENCODERSYNTAX=flac
 FLAC=flac
@@ -209,6 +211,7 @@ FLACTAGALBUMARTISTTAGNAME="ALBUMARTIST"
 FLACTAGALBUMARTISTVALUE="Various Artists"
 AACENCODERSYNTAX=ffmpeg
 FFMPEGENCOPTS="-c:a aac -b:a 192k"
+OUTPUTTYPE="flac"
 CDROMREADERSYNTAX=cdparanoia
 CDPARANOIA=cdparanoia
 CDPARANOIAOPTS="-L --never-skip=2"
@@ -227,7 +230,7 @@ IDENTIFY='magick identify'
 CONVERT='magick convert'
 DISPLAYCMD='magick display'
 DISPLAYCMDOPTS="-resize 900x900 -title abcde_album_art"
-CONVERTOPTS="-resize 900x900>"
+CONVERTOPTS="-resize 1200x1200>"
 ALBUMARTALWAYSCONVERT="y"
 munge_simplify_punctuation ()
 {
@@ -246,10 +249,8 @@ mungefilename ()
 {
         echo "$@" | \
                 munge_unicodetoascii | \
-                munge_Startcase      | \
-                munge_collapsewhitespace | \
-                munge_simplify_punctuation | \
                 munge_fs-safe | \
+                munge_collapsewhitespace | \
                 sed -e 's/\.*$//'
 }
 mungecddb ()

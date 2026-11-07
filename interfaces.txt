@@ -65,7 +65,8 @@ cddbdiscid  - raw data showing the cddb discid and the track info numbers
 	      used to calculate it
 
 mbdiscid    - raw data showing a musicbrainz discid and the track info
-	      numbers used to calculate it
+	      numbers used to calculate it. If archive mode is enabled this
+	      file is saved as mbdiscid.txt in the output directory.
 
 status 	    - log file of all the operations carried out thus far. Format
 	      is important - things are looked up here regularly to

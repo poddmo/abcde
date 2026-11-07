@@ -53,7 +53,11 @@ cddbquery   - result code and summary of a disc lookup. Based on the
 	      used internally by abcde to denote a local cddb data
 	      cache
 
-toc-<discid>.txt - raw CD TOC data used to generate cue file
+toc-<discid>.txt - raw CD TOC data used to generate cue file, written to
+              output directory in archive mode.
+
+cd-text-<discid>.txt - raw CD-TEXT data used to generate CDDB entry,
+              written to the output directory in archive mode.
 
 cue-<discid>.txt - cue file generated from the track data on the disc
 

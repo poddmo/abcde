@@ -7,18 +7,20 @@ The starting point for this GitHub repository was [2.9.4-DEV](https://git.einval
 Now up to version 2.13.2 released on 7th November, 2026. I've been actively maintaining this fork of abcde since 5th June, 2024. 
 
 My goals are to:
- - generate detailed backups of audio CDs in hand: audio tracks and metadata
+ - maintain abcde as a great automated or interactive audio CD encoder (aka "ripper")
  - streamline the workflow and automation
- - tag the audio tracks with accurate and complete metadata
+ - tag the audio tracks with as much information from the read process as possible (CD Table Of Contents (TOC), CUE sheets, CD-TEXT: complete CD metadata)
  - implement/facilitate changes that are standards compliant
    - metadata standards for flac and other output formats, eg tags
    - CDDB and CUE file formats
    - defacto standards implemented by music players and catalogues, eg Musicbrainz tags
  - provide ongoing maintenance so that abcde continues to work in the future
 
-abcde aims to record everything possible from the disc, starting with the audio tracks but also CD TOC, CD-TEXT, enhanced-CD directory listing, media read status/issues and metadata downloaded. Ideally the info should be stored in the audio file metadata.
+I mostly focus on flac but am considerate to not break existing functions such as reading once and encoding to multiple output formats in one pass.
 
-I mostly focus on flac but am considerate to not break existing function. Whole disk flac archives are now a format of focus due to their ability to capture an entire album, artwork and other metadata in a single file. Additionally, more music players are able to handle them correctly. Whole disk flacs can achieve the goal: One disc = one file
+Whole disk flac archives are now a format of focus due to their ability to capture an entire album, artwork and other metadata in a single file. More music players are now able to handle them correctly. Whole disk flacs can achieve the goal: One disc = one file
+
+Please take a moment and tell us about your audio CD ripping experience and environment in the [abcde user poll](https://github.com/poddmo/abcde/issues/50)
 
 ## Submitting issues and pull requests
 
@@ -28,14 +30,14 @@ I will look at pull requests respectfully but please submit code that you have r
 
 All changes committed to this repository are tested before I commit them so I encourage you to run the latest code and provide feedback.
 
-# Features
+# Features of this fork
 ## Enhancements
 - Read hidden track one audio tracks, if they exist
 - Rip one track CDs (a bug in older versions prevented ripping discs with only 1 track)
-- Improved handling of CD sets:
+- Greatly improved handling of CD sets:
   - The -W option is expanded to optionally add the total number of discs in the set. These details are recorded in the FLAC metadata tags DISCNUMBER and DISCTOTAL
   - Create playlist defaults to append instead of erase when the disc number is greater than 1
-- Improved handling of FLACs:
+- Greatly improved handling of FLACs:
   - Add the MUSICBRAINZ MBIDs as tags
   - comments added on the command line with the -w option are designated as USERCOMMENTS and added to every track
   - CDDB extended data (EXTD) are passed through to FLAC COMMENT tags and added to every track
@@ -62,10 +64,11 @@ All changes committed to this repository are tested before I commit them so I en
     - explain how to diff (show the differences between two CDDB entries)
     - provide option to re-list available entries
 - Archive mode
+  - aims to preserve on disc metadata and details from the encoding process
   - writes the raw CD TOC data to the output directory
   - if cd-text has been looked for and found, it is written to the output directory
   - planned features include:
-    - comprehensive metadata collection
+    - comprehensive on-disc metadata collection
     - directory listings of Enhanced CD
     - save data sessions to iso format
 
@@ -81,13 +84,13 @@ All changes committed to this repository are tested before I commit them so I en
   - highlight CDDB entries with extended info and provide a way to view it (ie -s 'genre,year,ext')
   - make the CDDB entry choice prompt for locally cached (line ~2618) the same as in do_cddbedit (line ~3031)
   - add `q` quit immediately and `x` exit cleanly options
-- create a completion report a la rubyrip that shows if any tracks have read errors (adding the `-l` option to cdparanoia logs the progress bar that can be used for analysis and reporting)
-- review playlist generation
+- Create a completion report a la rubyrip that shows if any tracks have read errors (adding the `-l` option to cdparanoia logs the progress bar that can be used for analysis and reporting)
+- Review playlist generation
   - add a new playlist option: `s` sort. Keep the existing playlist, append the new tracks, sort numerically, replace the existing playlist with the new sorted playlist. This new option will permit ripping discs in sets in any order and in parallel. Currently discs in sets need to be ripped sequentially for the generated playlist to make sense.
   - or just make a new playlist every time from the files in the directory sorted numerically - this makes most sense and represents current on-disk truth
 
 # Known issues
-- see Issues with the **bug** label
+- [See Issues with the **bug** label](https://github.com/poddmo/abcde/issues?q=is%3Aissue+state%3Aopen+label%3Abug)
 
 # Installation Instructions
 - The latest package or source code can be found here: https://github.com/poddmo/abcde/releases/latest
@@ -145,6 +148,14 @@ There will be dependencies that you will need to satisfy so I suggest to begin t
 Depends: cd-discid, wget, cdparanoia | icedax, vorbis-tools (>= 1.0beta4-1) | lame | flac | speex | musepack-tools | opus-tools, libmusicbrainz-discid-perl, libwebservice-musicbrainz-perl (>= 1.0.4-1.1), sensible-utils
 Recommends: vorbis-tools, libdigest-sha-perl, bsd-mailx, glyrc, imagemagick
 Suggests: eject, distmp3, id3 (>= 0.12), id3v2, eyed3 (<< 0.7~), normalize-audio, vorbisgain, mkcue, mp3gain, atomicparsley
+```
+
+You can also run it from the source directory:
+```
+wget -O abcde_2.13.2.tar.gz https://github.com/poddmo/abcde/archive/refs/tags/2.13.2.tar.gz
+tar zxf abcde_2.13.2.tar.gz
+cd abcde-2.13.2
+./abcde -V -G
 ```
 
 ## NixOS

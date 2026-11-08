@@ -128,7 +128,7 @@ Sorry we don't have a package or specific instructions yet. If you're handy at b
 The easiest way to get started is usually to install abcde from your distribution and then replace `abcde`, `abcde-musicbrainz-tool` and `abcde.1` with the latest version from this repository.
 
 ## NixOS
-There is an open pull request to [Add Nix flake, package, and NixOS module](https://github.com/poddmo/abcde/pull/38)
+There is a Nix flake, package, and NixOS module. See the [NixOS README](nixos/readme-nixos.md) for details.
 Please review, test and comment.
 
 ## Install from source

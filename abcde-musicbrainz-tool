@@ -19,6 +19,7 @@ use MusicBrainz::DiscID;
 use WebService::MusicBrainz 1.0.4;
 use Getopt::Long;
 use Pod::Usage;
+use List::Util qw(max);
 
 my $FRAMES_PER_S = 75;
 
@@ -155,6 +156,8 @@ if ($command =~ m/^id/) {
 	    my $medium = @mediums[0];
 	    my @tracks = @{ $medium->{'tracks'} };
 
+	    my $position = $medium->{'position'};
+	    my $max_pos = (max (map { $_->{'position'} } @{$release->{'media'}}));
 	    my $total_len = 0;
 	    for (my $i = 0; $i < scalar(@tracks); $i++) {
 		my $track = $tracks[$i];
@@ -208,6 +211,13 @@ if ($command =~ m/^id/) {
 	    open (OUT, "> $workdir/asin.$releasenum");
 	    print OUT $release->{'asin'};
 	    close OUT;
+
+	    if ($max_pos > 1) {
+		open (OUT, "> $workdir/multidisc.$releasenum");
+		print OUT $position . " " . $max_pos;
+		close OUT;
+	    }
+
 
 	    # Check to see that this entry is unique; generate a checksum
 	    # and compare to any previous checksums
